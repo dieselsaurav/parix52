@@ -1,0 +1,36 @@
+name: Build RMK firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.1  # pinned: vendored rmk fails on newer stable (pin! macro change)
+          targets: thumbv7em-none-eabihf
+          components: rust-src, llvm-tools, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-make
+        run: cargo install cargo-make
+
+      - name: Build UF2 firmware (central + peripheral)
+        run: cargo make uf2
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: parix52-rmk-firmware
+          path: |
+            build/parix52-rmk-central.uf2
+            build/parix52-rmk-peripheral.uf2
+            build/parix52-rmk-reset.uf2

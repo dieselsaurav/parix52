@@ -1,0 +1,310 @@
+# ============================================================================
+# corne-rmk — Corne (crkbd) split, 2x nice!nano (nRF52840), wireless BLE.
+#   Left half  = central    (talks USB/BLE to the host, owns the keymap, runs Vial)
+#   Right half = peripheral (talks BLE to the central only)
+#
+# Ported from the ZMK config (dieselsaurav/zmk-for-keyboards corne) with the
+# feature set of the sofle-rmk port (dieselsaurav/rmk-for-sofle); schema
+# conventions and the vendored BLE patch come from yuyudhan-rmk-config.
+# This file IS the firmware's keymap: read at COMPILE TIME by the RMK
+# proc-macro (via KEYBOARD_TOML_PATH in .cargo/config.toml).
+#
+# Pin map = ZMK `corne` shield + nice!nano pro_micro mapping:
+#   rows  pro_micro 4,5,6,7          = P0_22 P0_24 P1_00 P0_11
+#   cols  pro_micro 21,20,19,18,15,14 (left, mirrored on the right)
+# (pro_micro → nRF pin table verified 1:1 against the working sofle-rmk port.)
+# ============================================================================
+[keyboard]
+name = "parix52-rmk"
+product_name = "Parix 52"
+vendor_id = 0x4c4b
+product_id = 0x5052
+manufacturer = "Parix"
+chip = "nrf52840"
+
+# ----------------------------------------------------------------------------
+# ble_profiles_num = 4 defines the User0..User7 keycodes on the MEDIA layer:
+#   User0-3 = select profile BT0-BT3, User4 = next, User5 = prev,
+#   User6 = clear-bond (ZMK BT_CLR), User7 = toggle USB/BLE (ZMK OUT_TOG).
+# The MEDIA layer below and config/vial.json hard-code these positions.
+# ----------------------------------------------------------------------------
+[rmk]
+ble_profiles_num = 4
+# 14 combos ported from ZMK (default slot limit is 8)
+combo_max_num = 16
+# Light sleep after 10 min idle (mirrors the ZMK IDLE_TIMEOUT): displays
+# blank, RGB off, split link relaxes to a 200 ms interval; any key wakes.
+# (RMK has no ZMK-style System-OFF deep sleep yet — roadmap item.)
+split_central_sleep_timeout_seconds = 600
+
+# On-chip flash storage (Vial live-remaps, BLE bonds, selected profile
+# survive power-off).
+#
+# start_addr is NOT left at RMK's nRF default of 0x60000: the central image
+# is ~480 KB and runs past that address, so the default put the storage
+# inside the program. RMK erases the region on first boot and rewrites it
+# on every bond/peer save, which was wiping 8 KB of the central's own code.
+# 0xF0000 + 2 sectors ends at 0xF2000, below the Adafruit bootloader at
+# 0xF4000. memory.x caps the image at 0xF0000 so the linker refuses any
+# build that would reach the storage.
+[storage]
+start_addr = 0xF0000
+num_sectors = 2
+
+# ----------------------------------------------------------------------------
+# Bluetooth (host side) + battery reporting.
+# battery_adc_pin = "vddh": nRF52840 measures its own supply rail internally
+# (same as ZMK's zmk,battery-nrf-vddh in the corne overlays — no extra wiring).
+# default_tx_power = 8 dBm, same as ZMK CONFIG_BT_CTLR_TX_PWR_PLUS_8.
+# ----------------------------------------------------------------------------
+[ble]
+enabled = true
+battery_adc_pin = "vddh"
+adc_divider_measured = 2000
+adc_divider_total = 2806
+default_tx_power = 8
+
+# Vial unlock: hold the two inner LEFT THUMB keys — electrical (3,4)+(3,5)
+# = LT(1,Space) and LT(6,Tab) — while vial.rocks shows the unlock prompt.
+[host]
+unlock_keys = [[4, 5], [4, 4]]
+
+# ----------------------------------------------------------------------------
+# ELECTRICAL matrix: 4 rows x 12 cols (6 cols per half), 42 keys used.
+# Row 3 = thumb row: (3,3)-(3,5) left, (3,6)-(3,8) right — same as the ZMK
+# matrix transform. ,L/,R tags feed unilateral_tap in the HRM morse profile.
+# ----------------------------------------------------------------------------
+[layout]
+rows = 5
+cols = 12
+layers = 8
+matrix_map = """
+(0,0,L) (0,1,L) (0,2,L) (0,3,L) (0,4,L) (0,5,L)   (0,6,R) (0,7,R) (0,8,R) (0,9,R) (0,10,R) (0,11,R)
+(1,0,L) (1,1,L) (1,2,L) (1,3,L) (1,4,L) (1,5,L)   (1,6,R) (1,7,R) (1,8,R) (1,9,R) (1,10,R) (1,11,R)
+(2,0,L) (2,1,L) (2,2,L) (2,3,L) (2,4,L) (2,5,L)   (2,6,R) (2,7,R) (2,8,R) (2,9,R) (2,10,R) (2,11,R)
+(3,0,L) (3,1,L) (3,2,L) (3,3,L) (3,4,L) (3,5,L)   (3,6,R) (3,7,R) (3,8,R) (3,9,R) (3,10,R) (3,11,R)
+                                (4,5,L) (4,4,L)   (4,7,R) (4,6,R)
+"""
+
+# ============================================================================
+# KEYMAP — 8 layers: 0-6 = the seven typing layers (Miryoku-style, 1:1 from
+# the ZMK corne keymap), 7 = DISPOFF (transparent; blanks the OLEDs and kills
+# the RGB, toggled by TG(7) on MEDIA).
+# ============================================================================
+
+# Layer 0 — BASE. QWERTY, GACS home-row mods (tap = letter, hold = mod, tuned
+# by the HRM profile), Hyper on right pinky (ZMK &hyper macro). Thumbs:
+# Escape=MEDIA Space=NAV Tab=MOUSE | Enter=SYM Backspace=NUM Delete=FUN.
+[[layer]]
+name = "BASE"
+keys = """
+LT(6, Grave, TL)       Kc1              Kc2              Kc3               Kc4                Kc5                  Kc6                  Kc7                Kc8               Kc9              Kc0                  LT(5, Minus, TL)
+Tab                    Q                W                E                 R                  T                    Y                    U                  I                 O                P                    Backspace
+MT(Escape, LCtrl, HRM) MT(A, LGui, HRM) MT(S, LAlt, HRM) MT(D, LCtrl, HRM) MT(F, LShift, HRM) G                    H                    MT(J, RShift, HRM) MT(K, RCtrl, HRM) MT(L, RAlt, HRM) MT(Quote, RGui, HRM) WM(No, LCtrl | LShift | LAlt | LGui)
+LShift                 Z                X                C                 V                  B                    N                    M                  Comma             Dot              Slash                Escape
+                                                                           LT(1, Space, TL)   LT(3, Escape, TL)    LT(2, Backspace, TL) LT(4, Enter, TL)
+"""
+
+# Layer 1 — NAV (hold SPACE). Vim arrows right home row, clipboard chords
+# top right (macOS: Cmd-based), pre-held GACS mods left home row.
+[[layer]]
+name = "NAV"
+keys = """
+No No   No   No    No     No    No                   No          No          No          No          No
+No No   No   No    No     No    WM(Z, LGui | LShift) WM(V, LGui) WM(C, LGui) WM(X, LGui) WM(Z, LGui) No
+No LGui LAlt LCtrl LShift No    Left                 Down        Up          Right       CapsLock    No
+No No   No   No    No     No    Insert               Home        PageDown    PageUp      End         No
+                   No     No    Backspace            Enter
+"""
+
+# Layer 2 — NUM (hold BACKSPACE). Columnar numpad on the left hand, mirror
+# mods on the right home row.
+[[layer]]
+name = "NUM"
+keys = """
+No No          No  No  No  No              No No     No    No   No   No
+No LeftBracket Kc7 Kc8 Kc9 RightBracket    No No     No    No   No   No
+No Semicolon   Kc4 Kc5 Kc6 Equal           No RShift RCtrl RAlt RGui No
+No Grave       Kc1 Kc2 Kc3 Backslash       No No     No    No   No   No
+                       Kc0 Dot             No No
+"""
+
+# Layer 3 — MEDIA (hold ESCAPE). Media transport + all Bluetooth management:
+#   User0-3 = select BT profile 0-3    User6 = clear bond of CURRENT profile
+#   User7   = toggle output USB <-> BLE  TG(7) = blank OLEDs + RGB (layer 7)
+# (ZMK rgb_ug / ext_power keys not ported — no RMK support yet; TG(7) is the
+# RGB kill switch instead.)
+[[layer]]
+name = "MEDIA"
+keys = """
+No No   No   No    No     No    No             No             No           No         No             No
+No No   No   No    No     No    TG(7)          BrightnessDown BrightnessUp No         No             No
+No LGui LAlt LCtrl LShift No    No             MediaPrevTrack AudioVolDown AudioVolUp MediaNextTrack No
+No No   No   No    No     No    User7          User0          User1        User2      User3          User6
+                   No     No    MediaPlayPause MediaStop
+"""
+
+# Layer 4 — SYM (hold ENTER). NUM layer with shift applied: same positions,
+# shifted symbols ({ & * ( } etc.). Thumbs: ( ) _ (ZMK LPAR RPAR UNDER).
+[[layer]]
+name = "SYM"
+keys = """
+No No                   No           No           No           No                       No No     No    No   No   No
+No SHIFTED(LeftBracket) SHIFTED(Kc7) SHIFTED(Kc8) SHIFTED(Kc9) SHIFTED(RightBracket)    No No     No    No   No   No
+No SHIFTED(Semicolon)   SHIFTED(Kc4) SHIFTED(Kc5) SHIFTED(Kc6) SHIFTED(Equal)           No RShift RCtrl RAlt RGui No
+No SHIFTED(Grave)       SHIFTED(Kc1) SHIFTED(Kc2) SHIFTED(Kc3) SHIFTED(Backslash)       No No     No    No   No   No
+                                                  SHIFTED(Kc0) SHIFTED(Kc9)             No No
+"""
+
+# Layer 5 — FUN (hold DELETE). F-keys columnar like NUM.
+[[layer]]
+name = "FUN"
+keys = """
+F1 F2  F3 F4 F5    F6             F7 F8     F9    F10  F11  F12
+No F12 F7 F8 F9    PrintScreen    No No     No    No   No   No
+No F11 F4 F5 F6    ScrollLock     No RShift RCtrl RAlt RGui No
+No F10 F1 F2 F3    Pause          No No     No    No   No   No
+             Space Menu           No No
+"""
+
+# Layer 6 — MOUSE (hold TAB). Pointer on the right home row, scroll below,
+# buttons on the thumbs. ZMK MCLK/LCLK/RCLK = RMK Btn3/Btn1/Btn2.
+[[layer]]
+name = "MOUSE"
+keys = """
+No No   No   No    No     No    No             No             No           No              No No
+No No   No   No    No     No    No             No             No           No              No No
+No LGui LAlt LCtrl LShift No    MouseLeft      MouseDown      MouseUp      MouseRight      No No
+No No   No   No    No     No    MouseWheelLeft MouseWheelDown MouseWheelUp MouseWheelRight No No
+                   No     No    MouseBtn1      MouseBtn2
+"""
+
+# Layer 7 — DISPOFF (toggled by TG(7) on MEDIA). Fully transparent; only
+# signals the OLED renderers and the RGB processor (layer == 7) to go dark.
+[[layer]]
+name = "DISPOFF"
+keys = """
+_______ _______ _______ _______ _______ _______    _______ _______ _______ _______ _______ _______
+_______ _______ _______ _______ _______ _______    _______ _______ _______ _______ _______ _______
+_______ _______ _______ _______ _______ _______    _______ _______ _______ _______ _______ _______
+_______ _______ _______ _______ _______ _______    _______ _______ _______ _______ _______ _______
+                                _______ _______    _______ _______
+"""
+
+# ============================================================================
+# COMBOS — ported 1:1 from the ZMK config. Actions must match the keymap
+# tokens exactly (including morse profile args) to bind to those keys.
+# ============================================================================
+[behavior.combo]
+timeout = "50ms"
+combos = [
+    # Tier 1: essential
+    { actions = ["MT(F, LShift, HRM)", "MT(J, RShift, HRM)"], output = "CapsWordToggle" },
+    { actions = ["W", "E"], output = "Escape" },
+    { actions = ["I", "O"], output = "Backspace" },
+    { actions = ["O", "P"], output = "Delete" },
+    # Tier 2: high value
+    { actions = ["MT(S, LAlt, HRM)", "MT(D, LCtrl, HRM)"], output = "Tab" },
+    { actions = ["MT(K, RCtrl, HRM)", "MT(L, RAlt, HRM)"], output = "Enter" },
+    { actions = ["X", "C"], output = "WM(C, LGui)" },
+    { actions = ["C", "V"], output = "WM(V, LGui)" },
+    { actions = ["X", "V"], output = "WM(X, LGui)" },
+    # Tier 3: vertical symbol combos
+    { actions = ["MT(J, RShift, HRM)", "M"], output = "Minus" },
+    { actions = ["H", "N"], output = "SHIFTED(Minus)" },
+    { actions = ["MT(F, LShift, HRM)", "V"], output = "Equal" },
+    { actions = ["MT(S, LAlt, HRM)", "X"], output = "Grave" },
+    { actions = ["MT(L, RAlt, HRM)", "MT(Quote, RGui, HRM)"], output = "Semicolon" },
+]
+
+# ============================================================================
+# TAP-HOLD ("morse") tuning — timings carried over from the ZMK config:
+# tapping-term 200ms, require-prior-idle 150ms, quick-tap 175ms.
+#   HRM (home-row mods): flow-tap + permissive-hold + unilateral_tap —
+#     biased hard toward "it's a letter" (ZMK mt tap-preferred + prior-idle).
+#   TL (thumb layer-taps): flow-tap OFF (holding Space for NAV mid-streak
+#     must not force a literal space), permissive-hold ≈ ZMK lt "balanced".
+# ============================================================================
+[behavior.morse]
+enable_flow_tap = true
+prior_idle_time = "150ms"
+hold_timeout = "200ms"
+gap_timeout = "175ms"
+
+[behavior.morse.profiles]
+HRM = { enable_flow_tap = true, permissive_hold = true, unilateral_tap = true, hold_timeout = "200ms", gap_timeout = "175ms" }
+TL = { enable_flow_tap = false, permissive_hold = true, hold_timeout = "200ms", gap_timeout = "175ms" }
+
+# ============================================================================
+# SPLIT — halves talk BLE; only the central talks to the computer.
+# ble_addr: fixed static random addresses; the halves find each other by
+# these (unique per half, distinct from any other RMK board in range —
+# including the sofle-rmk pair).
+# ============================================================================
+[split]
+connection = "ble"
+
+# ---- LEFT half = central ----
+[split.central]
+rows = 5
+cols = 6
+row_offset = 0
+col_offset = 0
+ble_addr = [0x52, 0x10, 0x58, 0x49, 0x72, 0xd5]
+battery_adc_pin = "vddh"
+adc_divider_measured = 2000
+adc_divider_total = 2806
+
+# Corne left wiring: rows pro_micro 4,5,6,7; cols 21,20,19,18,15,14.
+# Default (deferred) debouncer: the eager "fast" one caused stuck/repeating
+# keys on the sofle port — keep the default here too.
+[split.central.matrix]
+matrix_type = "normal"
+row_pins = ["P0_22", "P0_24", "P1_00", "P0_11", "P1_04"]
+col_pins = ["P0_31", "P0_29", "P0_02", "P1_15", "P1_13", "P1_11"]
+
+# Central OLED — SSD1306 128x32, ZMK-built-in-style status renderer
+# (output/profile, battery, layer name). Event-driven only.
+# If content renders upside-down for your mount, change rotation to 180.
+[split.central.display]
+driver = "ssd1306"
+size = "128x32"
+rotation = 0
+renderer = "crate::status::StatusRenderer"
+
+[split.central.display.protocol.i2c]
+instance = "TWISPI0"
+sda = "P0_17"
+scl = "P0_20"
+
+# ---- RIGHT half = peripheral ----
+[[split.peripheral]]
+rows = 5
+cols = 6
+row_offset = 0
+col_offset = 6
+ble_addr = [0x53, 0x10, 0x58, 0x49, 0x72, 0xe6]
+battery_adc_pin = "vddh"
+adc_divider_measured = 2000
+adc_divider_total = 2806
+
+# Right half mirrors the left: cols pro_micro 14,15,18,19,20,21.
+[split.peripheral.matrix]
+matrix_type = "normal"
+row_pins = ["P0_22", "P0_24", "P1_00", "P0_11", "P1_04"]
+col_pins = ["P1_11", "P1_13", "P1_15", "P0_02", "P0_29", "P0_31"]
+
+# Right (peripheral) display — Parix screen: glitching P keycap logo, split-
+# link status, battery (port of the ZMK custom_status_screen.c from the corne
+# shield). Landscape (rotation 0), 150 ms tick drives the glitch animation.
+[split.peripheral.display]
+driver = "ssd1306"
+size = "128x32"
+rotation = 0
+renderer = "crate::parix::ParixRenderer"
+render_interval = 150
+
+[split.peripheral.display.protocol.i2c]
+instance = "TWISPI0"
+sda = "P0_17"
+scl = "P0_20"
