@@ -211,11 +211,8 @@ combos = [
     # Tier 1: essential
     { actions = ["MT(F, LShift, HRM)", "MT(J, RShift, HRM)"], output = "CapsWordToggle" },
     { actions = ["Q", "W"], output = "Escape" },
-    { actions = ["I", "O"], output = "Backspace" },
-    { actions = ["O", "P"], output = "Delete" },
+    { actions = ["O", "P"], output = "Backspace" },
     # Tier 2: high value
-    { actions = ["MT(S, LAlt, HRM)", "MT(D, LCtrl, HRM)"], output = "Tab" },
-    { actions = ["MT(K, RCtrl, HRM)", "MT(L, RAlt, HRM)"], output = "Enter" },
     { actions = ["X", "C"], output = "WM(C, LGui)" },
     { actions = ["C", "V"], output = "WM(V, LGui)" },
     { actions = ["X", "V"], output = "WM(X, LGui)" },
