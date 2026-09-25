@@ -25,7 +25,10 @@ fn expand_split_communication_config(chip: &ChipModel, split_config: &SplitConfi
             // to them directly instead of scanning for any RMK peripheral and
             // trusting whatever address an earlier scan left in flash.
             let seed_addrs = split_config.peripheral.iter().enumerate().filter_map(|(i, p)| {
-                p.ble_addr.map(|addr| quote! { peripheral_addrs.borrow_mut()[#i] = Some([ #(#addr),* ]); })
+                p.ble_addr.map(|addr| quote! {
+                    peripheral_addrs.borrow_mut()[#i] = Some([ #(#addr),* ]);
+                    ::rmk::split::ble::central::set_configured_peripheral_addr(#i, [ #(#addr),* ]);
+                })
             });
             quote! {
                 // Must run before the storage task starts (both need `&mut storage`).

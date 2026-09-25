@@ -147,6 +147,25 @@ pub async fn scan_peripherals<
 
 // When no peripheral address is saved, the central should first scan for peripheral.
 // This handler is used to handle the scan result.
+/// Peripheral addresses fixed in keyboard.toml, by peripheral id. Seeded by
+/// the generated main before the peripheral managers start. A configured
+/// address is never forgotten: on a connect timeout the manager falls back
+/// to it instead of clearing the slot and scanning for any RMK peripheral.
+static CONFIGURED_ADDRS: embassy_sync::blocking_mutex::Mutex<crate::RawMutex, core::cell::RefCell<[Option<[u8; 6]>; 8]>> =
+    embassy_sync::blocking_mutex::Mutex::new(core::cell::RefCell::new([None; 8]));
+
+pub fn set_configured_peripheral_addr(id: usize, addr: [u8; 6]) {
+    CONFIGURED_ADDRS.lock(|c| {
+        if let Some(slot) = c.borrow_mut().get_mut(id) {
+            *slot = Some(addr);
+        }
+    });
+}
+
+fn configured_peripheral_addr(id: usize) -> Option<[u8; 6]> {
+    CONFIGURED_ADDRS.lock(|c| c.borrow().get(id).copied().flatten())
+}
+
 pub(crate) struct ScanHandler {}
 
 impl EventHandler for ScanHandler {
@@ -272,9 +291,15 @@ pub(crate) async fn run_ble_peripheral_manager<
             }
             Err(_) => {
                 // Connect to peripheral timeout
-                warn!("Connect to peripheral {} timeout, clearing", peri_id);
+                // A scanned address may be stale, so forget it and scan again.
+                // A configured one is the truth: keep it, or the central would
+                // only find its peripheral again once that half falls back to
+                // undirected advertising, ten seconds after every drop.
+                let keep = configured_peripheral_addr(peri_id);
+                warn!("Connect to peripheral {} timeout, {}", peri_id,
+                      if keep.is_some() { "retrying the configured address" } else { "clearing" });
                 if let Some(addr) = addrs.borrow_mut().get_mut(peri_id) {
-                    *addr = None
+                    *addr = keep;
                 };
             }
         }
