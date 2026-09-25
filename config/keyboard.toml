@@ -42,14 +42,24 @@ split_central_sleep_timeout_seconds = 600
 #
 # start_addr is NOT left at RMK's nRF default of 0x60000: the central image
 # is ~480 KB and runs past that address, so the default put the storage
-# inside the program. RMK erases the region on first boot and rewrites it
-# on every bond/peer save, which was wiping 8 KB of the central's own code.
-# 0xF0000 + 2 sectors ends at 0xF2000, below the Adafruit bootloader at
-# 0xF4000. memory.x caps the image at 0xF0000 so the linker refuses any
-# build that would reach the storage.
+# inside the program and its first-boot erase wiped 8 KB of code.
+#
+# num_sectors is NOT left at RMK's default of 2 either. RMK writes EVERY key
+# of every layer into the store on first boot -- 5 x 12 x 8 = 480 entries at
+# ~16 bytes each, 7.7 KB -- plus the layout, behaviour and macro blobs and up
+# to four BLE bonds, about 10 KB live. sequential-storage keeps one page as
+# a migration buffer, so the live data has to fit in num_sectors - 1 pages
+# of 4 KB. With 2 sectors that is 4 KB: the keymap never fully stored, and
+# every Vial edit afterwards failed with "storage full" and was lost on the
+# next power-up. 8 sectors = 28 KB usable, and the macro refuses to build
+# a config whose keymap cannot fit.
+#
+# 0xEC000 + 8 x 4 KB ends at 0xF4000, exactly where the Adafruit bootloader
+# begins. memory.x caps the image at 0xEC000 so the linker refuses any build
+# that would reach the storage.
 [storage]
-start_addr = 0xF0000
-num_sectors = 2
+start_addr = 0xEC000
+num_sectors = 8
 
 # ----------------------------------------------------------------------------
 # Bluetooth (host side) + battery reporting.

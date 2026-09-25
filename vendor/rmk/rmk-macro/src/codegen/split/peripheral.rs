@@ -261,7 +261,7 @@ fn expand_split_peripheral(
     let mut chip_init = expand_chip_init(hardware, Some(id), &item_mod);
     if split_config.connection == "ble" {
         // Add storage when using BLE split
-        let flash_init = expand_flash_init(hardware);
+        let flash_init = expand_flash_init(hardware, None);
         chip_init.extend(quote! {
             #flash_init
             let mut storage = ::rmk::storage::new_storage_for_split_peripheral(flash, storage_config).await;
