@@ -96,3 +96,10 @@ lto = "fat"
 # path-deps resolve inside the vendored tree.
 [patch."https://github.com/HaoboGu/rmk"]
 rmk = { path = "vendor/rmk/rmk" }
+
+# Vendored nrf-mpsl (rev ffe59a7) with the flash timeslot driver reshaped so
+# a flash write fits between radio events and never panics in the timeslot
+# callback. See vendor/nrf-mpsl/FLASH_PATCH.md. The -sys crate with the
+# Nordic binaries stays a git dependency.
+[patch."https://github.com/haobogu/nrf-sdc"]
+nrf-mpsl = { path = "vendor/nrf-mpsl" }
