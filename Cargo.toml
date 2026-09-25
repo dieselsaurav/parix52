@@ -7,22 +7,12 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-# default-features = false drops RMK's `defmt`: trouble-host refuses defmt
-# and log together, and the USB serial log needs `log`. The other defaults
-# (storage, vial, vial_lock, watchdog) are re-listed here.
-rmk = { git = "https://github.com/HaoboGu/rmk", rev = "b98204928e9a8532064ce99add1f6c4c554e08c9", default-features = false, features = [
-    "storage",
-    "vial",
-    "vial_lock",
-    "watchdog",
+rmk = { git = "https://github.com/HaoboGu/rmk", rev = "b98204928e9a8532064ce99add1f6c4c554e08c9", features = [
     "nrf52840_ble",
     "split",
     "async_matrix",
     "adafruit_bl",
     "ssd1306",
-    # log over a USB CDC serial port (the crash reporter in src/crash.rs
-    # reports there; read it on the Mac with scripts/usblog.sh)
-    "usb_log",
 ] }
 nrf-sdc = { git = "https://github.com/haobogu/nrf-sdc", rev = "ffe59a7aefaaa145a3d2474602f33387f80dcefa", features = [
     "defmt",
@@ -56,8 +46,7 @@ embassy-executor= { version = "0.10", features = [
 ] }
 defmt = "1.0"
 defmt-rtt = "1.0"
-panic-probe = { version = "1.0", features = ["print-defmt"] }  # reset.rs only
-log = "0.4"
+panic-probe = { version = "1.0", features = ["print-defmt"] }
 static_cell = "2"
 embedded-graphics = "0.8"
 embedded-storage = "0.3"
