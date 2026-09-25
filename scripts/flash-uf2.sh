@@ -8,10 +8,18 @@ UF2=${1:?usage: flash-uf2.sh <file.uf2>}
 for i in {1..2400}; do [ -d /Volumes/NICENANO ] && break; sleep 0.5; done
 [ -d /Volumes/NICENANO ] || { echo "$(date +%T) timed out waiting for NICENANO"; exit 1; }
 echo "$(date +%T) NICENANO mounted: $(grep -o 'Board-ID: [^ ]*' /Volumes/NICENANO/INFO_UF2.TXT 2>/dev/null)"
-if cp "$UF2" "/Volumes/NICENANO/$(basename $UF2)"; then
-  echo "$(date +%T) copied $(basename $UF2) ($(stat -f %z $UF2) bytes)"
-else
-  echo "$(date +%T) COPY FAILED, nothing written"; exit 1
-fi
+# macOS sometimes refuses the first write to a freshly mounted FAT volume
+# ("Permission denied") for a few seconds; retry under a fresh name.
+ok=0
+for try in {1..15}; do
+  name=$( [ $try = 1 ] && basename $UF2 || echo "FIRMWARE$try.UF2" )
+  if cp "$UF2" "/Volumes/NICENANO/$name" 2>/tmp/flash-uf2.err; then
+    echo "$(date +%T) copied as $name ($(stat -f %z $UF2) bytes)"; ok=1; break
+  fi
+  echo "$(date +%T) try $try: $(cat /tmp/flash-uf2.err)"
+  [ -d /Volumes/NICENANO ] || { echo "$(date +%T) volume vanished before the copy went through"; exit 1; }
+  sleep 2
+done
+[ $ok = 1 ] || { echo "$(date +%T) COPY FAILED, nothing written"; exit 1; }
 for i in {1..60}; do [ -d /Volumes/NICENANO ] || { echo "$(date +%T) volume gone, board rebooted into $(basename $UF2)"; exit 0; }; sleep 0.5; done
 echo "$(date +%T) volume still mounted after 30 s, flash did not take"; exit 1
