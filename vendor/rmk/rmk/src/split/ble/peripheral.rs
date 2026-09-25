@@ -1,13 +1,13 @@
 use bt_hci::cmd::le::LeSetPhy;
 use bt_hci::controller::ControllerCmdAsync;
-use embassy_futures::join::join;
+use embassy_futures::join::{join, join3};
 use embassy_time::{Duration, Timer, with_timeout};
 use rmk_types::connection::ConnectionStatus;
 use trouble_host::prelude::*;
 
 #[cfg(feature = "storage")]
 use super::PeerAddress;
-use crate::event::{CentralConnectedEvent, KeyboardEvent, SubscribableEvent, publish_event};
+use crate::event::{CentralConnectedEvent, KeyboardEvent, SleepStateEvent, SubscribableEvent, publish_event};
 use crate::split::driver::{SplitDriverError, SplitReader, SplitWriter};
 use crate::split::peripheral::SplitPeripheral;
 use crate::split::{SPLIT_MESSAGE_MAX_SIZE, SplitMessage};
@@ -187,7 +187,30 @@ pub async fn initialize_nrf_ble_split_peripheral_and_run<'b, 's: 'b, C: Controll
         }
     };
 
-    join(ble_task(runner), peri_task).await;
+    // A key pressed on this half is activity, whether or not a central is
+    // there to hear about it. The central tells us to sleep after its idle
+    // timeout and only it can tell us to wake -- so once it was switched off
+    // while we slept, the display and the lights stayed dark through every
+    // key press until a central reconnected. Track the last sleep state we
+    // were told and clear it ourselves on the first local key.
+    let local_wake = async {
+        let mut sleep_sub = SleepStateEvent::subscriber();
+        let mut key_sub = KeyboardEvent::subscriber();
+        let mut sleeping = false;
+        loop {
+            match embassy_futures::select::select(sleep_sub.next_message_pure(), key_sub.next_message_pure()).await {
+                embassy_futures::select::Either::First(e) => sleeping = e.0,
+                embassy_futures::select::Either::Second(k) => {
+                    if sleeping && k.pressed {
+                        sleeping = false;
+                        publish_event(SleepStateEvent::new(false));
+                    }
+                }
+            }
+        }
+    };
+
+    join3(ble_task(runner), peri_task, local_wake).await;
 }
 
 /// Create an advertiser to use to connect to a BLE Central, and wait for it to connect.
