@@ -130,12 +130,12 @@ pub(crate) fn expand_imports_and_constants(
             // If defmt_log is disabled, add an empty defmt logger impl
             if hardware.dependency.defmt_log {
                 quote! {
-                    use panic_probe as _;
+                    // panic handler: the binary's own (see src/crash.rs)
                     use defmt_rtt as _;
                 }
             } else {
                 quote! {
-                    use panic_probe as _;
+                    // panic handler: the binary's own (see src/crash.rs)
 
                     #[::defmt::global_logger]
                     struct Logger;

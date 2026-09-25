@@ -60,7 +60,7 @@ pub(crate) fn parse_split_peripheral_mod(
     } else {
         quote! {
             use defmt_rtt as _;
-            use panic_probe as _;
+            // panic handler: the binary's own (see src/crash.rs)
 
             #bind_interrupts
             #[::embassy_executor::main]
