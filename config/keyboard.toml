@@ -210,7 +210,7 @@ timeout = "50ms"
 combos = [
     # Tier 1: essential
     { actions = ["MT(F, LShift, HRM)", "MT(J, RShift, HRM)"], output = "CapsWordToggle" },
-    { actions = ["W", "E"], output = "Escape" },
+    { actions = ["Q", "W"], output = "Escape" },
     { actions = ["I", "O"], output = "Backspace" },
     { actions = ["O", "P"], output = "Delete" },
     # Tier 2: high value
