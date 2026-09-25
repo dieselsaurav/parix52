@@ -1,4 +1,14 @@
 pub fn jump_to_bootloader() {
+    // The jump below is a soft reset. On nRF52 the watchdog is NOT reset by
+    // a soft reset (only by a pin reset, brownout or power-on), and the
+    // Adafruit bootloader never feeds it, so once the watchdog is running
+    // the DFU session dies at the next timeout -- typically mid-write,
+    // leaving a half-flashed application. Refuse rather than brick.
+    #[cfg(all(feature = "adafruit_bl", feature = "watchdog"))]
+    if embassy_nrf::pac::WDT.runstatus().read().runstatus() {
+        error!("Bootloader jump refused: the watchdog is running and survives a soft reset. Double-tap the reset button instead.");
+        return;
+    }
     #[cfg(feature = "adafruit_bl")]
     // Reference: https://github.com/adafruit/Adafruit_nRF52_Bootloader/blob/d6b28e66053eea467166f44875e3c7ec741cb471/src/main.c#L107
     embassy_nrf::pac::POWER
