@@ -778,12 +778,22 @@ pub(crate) async fn update_ble_phy<P: PacketPool>(
     stack: &Stack<'_, impl Controller + ControllerCmdAsync<LeSetPhy>, P>,
     conn: &Connection<'_, P>,
 ) {
+    // The controller answers an HCI command synchronously, inside the call:
+    // `set_phy` returns without ever yielding to the executor. Retrying with
+    // a bare `continue` therefore spins with nothing else able to run -- no
+    // watchdog feed, no radio host task, no USB -- until the watchdog resets
+    // the chip ten seconds later. Status 0x2A (transaction collision) is the
+    // normal answer while the peer runs its own PHY update, which a Mac does
+    // the instant it connects. Back off between tries and give up after a
+    // while; 1M PHY is not worth a reboot.
+    let mut tries = 0u8;
     loop {
         match conn.set_phy(stack, PhyKind::Le2M).await {
             Err(BleHostError::BleHost(Error::Hci(error))) => {
-                if 0x2A == error.to_status().into_inner() {
-                    // Busy, retry
-                    info!("[update_ble_phy] HCI busy: {:?}", error);
+                if 0x2A == error.to_status().into_inner() && tries < 20 {
+                    tries += 1;
+                    info!("[update_ble_phy] HCI busy, retry {}: {:?}", tries, error);
+                    embassy_time::Timer::after_millis(50).await;
                     continue;
                 } else {
                     error!("[update_ble_phy] HCI error: {:?}", error);
@@ -813,12 +823,17 @@ pub(crate) async fn update_conn_params<
     conn: &Connection<'b, P>,
     params: &RequestedConnParams,
 ) {
+    // Same shape as update_ble_phy: the command is synchronous, so the retry
+    // must sleep, and it must not retry forever on a peer that keeps its own
+    // procedure running.
+    let mut tries = 0u8;
     loop {
         match conn.update_connection_params(stack, params).await {
             Err(BleHostError::BleHost(Error::Hci(error))) => {
-                if 0x3A == error.to_status().into_inner() {
-                    // Busy, retry
-                    info!("[update_conn_params] HCI busy: {:?}", error);
+                let status = error.to_status().into_inner();
+                if (status == 0x3A || status == 0x2A) && tries < 20 {
+                    tries += 1;
+                    info!("[update_conn_params] HCI busy, retry {}: {:?}", tries, error);
                     embassy_time::Timer::after_millis(100).await;
                     continue;
                 } else {

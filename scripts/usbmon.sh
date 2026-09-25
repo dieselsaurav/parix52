@@ -5,7 +5,7 @@ END=$(( $(date +%s) + ${1:-60} ))
 last=""
 while [ $(date +%s) -lt $END ]; do
   sid=$(ioreg -p IOUSB -l -w0 2>/dev/null | grep -A30 '"USB Product Name" = "Parix 52"' | grep -o '"sessionID" = [0-9]*' | head -1 | awk '{print $3}')
-  boot=$([ -d /Volumes/NICENANO ] && echo BOOTLOADER || echo -)
+  if [ -d /Volumes/NICENANO ]; then boot=BOOTLOADER; else boot=-; fi
   cur="kbd=${sid:-ABSENT} boot=$boot"
   [ "$cur" != "$last" ] && echo "$(date +%H:%M:%S.%N | cut -c1-12)  $cur" && last="$cur"
   sleep 0.5
