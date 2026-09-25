@@ -103,8 +103,8 @@ matrix_map = """
 # ============================================================================
 
 # Layer 0 — BASE. QWERTY, GACS home-row mods (tap = letter, hold = mod, tuned
-# by the HRM profile), Hyper on right pinky (ZMK &hyper macro). Thumbs:
-# Escape=MEDIA Space=NAV Tab=MOUSE | Enter=SYM Backspace=NUM Delete=FUN.
+# by the HRM profile), Hyper on right pinky (ZMK &hyper macro). Thumbs, left
+# to right: Space=MEDIA Tab=NAV | Enter=SYM Backspace=NUM.
 [[layer]]
 name = "BASE"
 keys = """
@@ -112,10 +112,10 @@ LT(6, Grave, TL)       Kc1              Kc2              Kc3               Kc4  
 Tab                    Q                W                E                 R                  T                    Y                    U                  I                 O                P                    Backspace
 MT(Escape, LCtrl, HRM) MT(A, LGui, HRM) MT(S, LAlt, HRM) MT(D, LCtrl, HRM) MT(F, LShift, HRM) G                    H                    MT(J, RShift, HRM) MT(K, RCtrl, HRM) MT(L, RAlt, HRM) MT(Quote, RGui, HRM) WM(No, LCtrl | LShift | LAlt | LGui)
 LShift                 Z                X                C                 V                  B                    N                    M                  Comma             Dot              Slash                Escape
-                                                                           LT(1, Space, TL)   LT(3, Escape, TL)    LT(2, Backspace, TL) LT(4, Enter, TL)
+                                                                           LT(3, Space, TL)   LT(1, Tab, TL)       LT(4, Enter, TL)     LT(2, Backspace, TL)
 """
 
-# Layer 1 — NAV (hold SPACE). Vim arrows right home row, clipboard chords
+# Layer 1 — NAV (hold TAB). Vim arrows right home row, clipboard chords
 # top right (macOS: Cmd-based), pre-held GACS mods left home row.
 [[layer]]
 name = "NAV"
@@ -139,7 +139,7 @@ No Grave       Kc1 Kc2 Kc3 Backslash       No No     No    No   No   No
                        Kc0 Dot             No No
 """
 
-# Layer 3 — MEDIA (hold ESCAPE). Media transport + all Bluetooth management:
+# Layer 3 — MEDIA (hold SPACE). Media transport + all Bluetooth management:
 #   User0-3 = select BT profile 0-3    User6 = clear bond of CURRENT profile
 #   User7   = toggle output USB <-> BLE  TG(7) = blank OLEDs + RGB (layer 7)
 # (ZMK rgb_ug / ext_power keys not ported — no RMK support yet; TG(7) is the
