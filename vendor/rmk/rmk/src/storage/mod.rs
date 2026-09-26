@@ -553,34 +553,19 @@ impl<F: AsyncNorFlash, const ROW: usize, const COL: usize, const NUM_LAYER: usiz
             .await
             .map_err(|e| print_storage_error::<F>(e))?;
 
+        // The keymap itself is NOT written here. `read_keymap` starts from the
+        // compiled defaults and only overwrites keys that have a stored entry,
+        // so storing every default at first boot stored nothing the program
+        // did not already contain: 480 flash writes and most of the store on
+        // a 5 x 12 x 8 layout, for no information. Only what a host changes
+        // is stored, as it is changed. A keymap change in keyboard.toml still
+        // takes effect because the build hash wipes the store.
+        //
+        // `reset_layout_only` below is different and keeps its loop: it resets
+        // a store in place, and a map that cannot delete entries can only
+        // reset a key by overwriting it with the default.
         #[cfg(feature = "host")]
-        for (layer, layer_data) in keymap.iter().enumerate() {
-            for (row, row_data) in layer_data.iter().enumerate() {
-                for (col, action) in row_data.iter().enumerate() {
-                    self.store_data(
-                        StorageKey::keymap(layer as u8, row as u8, col as u8),
-                        &StorageData::KeyAction(*action),
-                    )
-                    .await
-                    .map_err(|e| print_storage_error::<F>(e))?;
-                }
-            }
-        }
-
-        // Save encoder configurations
-        #[cfg(feature = "host")]
-        if let Some(encoder_map) = encoder_map {
-            for (layer, layer_data) in encoder_map.iter().enumerate() {
-                for (idx, action) in layer_data.iter().enumerate() {
-                    self.store_data(
-                        StorageKey::encoder(idx as u8, layer as u8),
-                        &StorageData::EncoderAction(*action),
-                    )
-                    .await
-                    .map_err(|e| print_storage_error::<F>(e))?;
-                }
-            }
-        }
+        let _ = (keymap, encoder_map);
 
         Ok(())
     }
@@ -603,14 +588,31 @@ impl<F: AsyncNorFlash, const ROW: usize, const COL: usize, const NUM_LAYER: usiz
         self.store_data(StorageKey::BehaviorConfig, &StorageData::from(behavior))
             .await?;
 
-        // The keymap itself is NOT written here. `read_keymap` starts from the
-        // compiled defaults and only overwrites keys that have a stored entry,
-        // so storing every default at first boot stored nothing the program
-        // did not already contain: 480 flash writes and most of the store on
-        // a 5 x 12 x 8 layout, for no information. Only what a host changes
-        // is stored, as it is changed. A keymap change in keyboard.toml still
-        // takes effect because the build hash wipes the store.
-        let _ = (keymap, encoder_map);
+        // TODO: Generic reset for vial and other hosts
+        for (layer, layer_data) in keymap.iter().enumerate() {
+            for (row, row_data) in layer_data.iter().enumerate() {
+                for (col, action) in row_data.iter().enumerate() {
+                    self.store_data(
+                        StorageKey::keymap(layer as u8, row as u8, col as u8),
+                        &StorageData::KeyAction(*action),
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        // TODO: Generic reset for vial and other hosts
+        if let Some(encoder_map) = encoder_map {
+            for (layer, layer_data) in encoder_map.iter().enumerate() {
+                for (idx, action) in layer_data.iter().enumerate() {
+                    self.store_data(
+                        StorageKey::encoder(idx as u8, layer as u8),
+                        &StorageData::EncoderAction(*action),
+                    )
+                    .await?;
+                }
+            }
+        }
 
         Ok(())
     }
