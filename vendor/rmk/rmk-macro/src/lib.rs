@@ -21,16 +21,7 @@ pub fn rmk_keyboard(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn rmk_central(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item_mod = parse_macro_input!(item as syn::ItemMod);
-    dump_expansion("central", parse_keyboard_mod(item_mod)).into()
-}
-
-/// Write the generated code to `$RMK_MACRO_DUMP_DIR/<name>.rs` when that
-/// variable is set, so what the macro emitted can be read without nightly.
-fn dump_expansion(name: &str, tokens: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    if let Ok(dir) = std::env::var("RMK_MACRO_DUMP_DIR") {
-        let _ = std::fs::write(format!("{dir}/{name}.rs"), tokens.to_string());
-    }
-    tokens
+    parse_keyboard_mod(item_mod).into()
 }
 
 /// Attribute for `rmk_peripheral` macro
@@ -57,7 +48,7 @@ pub fn rmk_peripheral(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    dump_expansion("peripheral", parse_split_peripheral_mod(peripheral_id, attr, item_mod)).into()
+    parse_split_peripheral_mod(peripheral_id, attr, item_mod).into()
 }
 
 /// Marker attribute for coordinating Runnable generation between macros.

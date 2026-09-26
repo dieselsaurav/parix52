@@ -2,7 +2,6 @@
 mod common;
 
 use std::path::Path;
-use std::process::Command;
 use std::{env, fs};
 
 fn main() {
@@ -33,20 +32,6 @@ fn main() {
     fs::write(&dest_path, constants).expect("Failed to write constants.rs file");
 }
 fn compute_build_hash() -> u32 {
-    // Get the short hash of the latest Git commit. Use "unknown" if it fails
-    let commit_id = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()
-        .and_then(|output| {
-            if output.status.success() {
-                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| "unknown".to_string());
-
     // The keyboard config, when the build knows where it is. Its bytes go
     // into the hash so any keymap change invalidates the store. No time
     // component: two builds of the same commit and config produce the same
@@ -57,10 +42,7 @@ fn compute_build_hash() -> u32 {
         .and_then(|p| fs::read(p).ok())
         .unwrap_or_default();
 
-    // Combine data and compute CRC32
     let mut hasher = crc32fast::Hasher::new();
-    hasher.update(commit_id.as_bytes());
-    hasher.update(b"_");
     hasher.update(&toml);
     hasher.finalize()
 }

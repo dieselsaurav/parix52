@@ -10,4 +10,3 @@ target
 .claude/
 build/*.log
 build/*.rs
-build/keymon

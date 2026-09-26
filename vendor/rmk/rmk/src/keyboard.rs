@@ -346,7 +346,9 @@ impl<'a> Keyboard<'a> {
                     }
                 }
             }
-            _ => (),
+            // A buffered entry this arm does not handle must not spin the
+            // task: yield so the rest of the keyboard keeps running.
+            _ => yield_now().await,
         }
     }
 

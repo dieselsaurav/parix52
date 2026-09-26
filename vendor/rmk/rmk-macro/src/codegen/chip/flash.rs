@@ -82,7 +82,7 @@ fn check_storage_capacity(hardware: &Hardware, layout: &Layout, num_sectors: u8)
         _ => return,
     };
     let (rows, cols, layers) = (layout.rows as usize, layout.cols as usize, layout.layers as usize);
-    let per_key = 16; // 8-byte item header + ~4-byte key + ~4-byte value, word aligned
+    let per_key = 28; // 8-byte header + 4-byte key + up to 12-byte tap-hold value, word aligned
     let keymap = rows * cols * layers * per_key;
     let fixed = 4096; // layout + behaviour + macros + 4 bonds + peers, generously
     let need = keymap + fixed;

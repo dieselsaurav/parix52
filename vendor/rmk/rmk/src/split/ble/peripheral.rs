@@ -291,7 +291,10 @@ fn get_peri_advertiser<'a, C: Controller>(
 async fn ble_task<C: Controller + ControllerCmdAsync<LeSetPhy>, P: PacketPool>(mut runner: Runner<'_, C, P>) {
     loop {
         if let Err(e) = runner.run().await {
-            panic!("[ble_task] error: {:?}", e);
+            #[cfg(feature = "defmt")]
+            let e = defmt::Debug2Format(&e);
+            error!("[ble_task] runner error: {:?}", e);
+            Timer::after_millis(100).await;
         }
     }
 }

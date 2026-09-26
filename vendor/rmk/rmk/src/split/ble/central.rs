@@ -172,7 +172,7 @@ impl EventHandler for ScanHandler {
     fn on_adv_reports(&self, mut it: LeAdvReportsIter<'_>) {
         while let Some(Ok(report)) = it.next() {
             // Check advertisement data
-            if report.data.len() < 25 {
+            if report.data.len() < 26 {
                 continue;
             }
             if report.data[4] == 0x07
@@ -566,7 +566,7 @@ async fn sleep_manager_task<
                 min_connection_interval: Duration::from_millis(200),
                 max_connection_interval: Duration::from_millis(200),
                 max_latency: 25, // 5s
-                supervision_timeout: Duration::from_secs(11),
+                supervision_timeout: Duration::from_secs(21), // 2x the 10.4 s the spec minimum
                 ..Default::default()
             };
 

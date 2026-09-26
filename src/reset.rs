@@ -12,8 +12,8 @@
 //!   fast blink (~0.1 s) = erase FAILED, retry / investigate
 //!
 //! Storage region: RMK's nrf52840 default (rmk-config
-//! `default_config/nrf52840.toml`): start_addr = 0xA0000, num_sectors = 32
-//! (x 4 KiB) -> 0xA0000..0xC0000. Our keyboard.toml leaves `[storage]` at
+//! config/keyboard.toml [storage]: start_addr = 0xEC000, num_sectors = 8
+//! (x 4 KiB) -> 0xEC000..0xF4000, ending at the Adafruit bootloader. Keep this at
 //! defaults, so these MUST stay in sync with it: if `start_addr` /
 //! `num_sectors` are ever overridden there, update these constants.
 
@@ -31,8 +31,9 @@ use nrf_mpsl as _;
 use panic_probe as _;
 
 /// RMK storage region (absolute flash addresses) — see module docs.
-const STORAGE_START: u32 = 0x000A_0000;
-const STORAGE_END: u32 = 0x000C_0000;
+// Must match config/keyboard.toml [storage]: 0xEC000, 8 x 4 KiB, up to the bootloader.
+const STORAGE_START: u32 = 0x000E_C000;
+const STORAGE_END: u32 = 0x000F_4000;
 
 /// ~1 s at the 64 MHz core clock.
 const SLOW: u32 = 64_000_000;
