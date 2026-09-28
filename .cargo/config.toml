@@ -10,3 +10,9 @@ target = "thumbv7em-none-eabihf"     # Cortex-M4F and Cortex-M7F (with FPU)
 [env]
 DEFMT_LOG = "debug"
 KEYBOARD_TOML_PATH =  { value = "config/keyboard.toml", relative = true }
+# trouble-host's per-connection event queue, default 2. Events are posted with
+# try_send and dropped when it is full, so with two slots a burst of PHY /
+# data-length / parameter updates on a Mac connect could drop `Encrypted`
+# (BLE never marked Connected, reports stay on USB) or `Disconnected` (the
+# host loop never re-advertises).
+TROUBLE_HOST_CONNECTION_EVENT_QUEUE_SIZE = "8"

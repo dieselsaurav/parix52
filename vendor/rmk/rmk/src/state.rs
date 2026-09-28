@@ -95,13 +95,11 @@ pub(crate) async fn load_preferred_connection() -> ConnectionType {
     let stored = crate::storage::read_connection_type().await;
     #[cfg(not(feature = "storage"))]
     let stored: Option<ConnectionType> = None;
-    match stored {
-        Some(c) => c,
-        #[cfg(feature = "_no_usb")]
-        None => ConnectionType::Ble,
-        #[cfg(not(feature = "_no_usb"))]
-        None => ConnectionType::Usb,
-    }
+    // Bluetooth when nothing is stored, not USB: on a wireless board every
+    // store wipe (any keyboard.toml change) used to leave it typing over USB
+    // whenever a cable was in, even with the host connected over Bluetooth.
+    // USB still takes over whenever Bluetooth is not connected.
+    stored.unwrap_or(ConnectionType::Ble)
 }
 
 #[cfg(all(feature = "_ble", not(feature = "_no_usb")))]

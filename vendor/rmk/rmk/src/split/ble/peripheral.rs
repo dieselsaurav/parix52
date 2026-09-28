@@ -293,8 +293,12 @@ async fn ble_task<C: Controller + ControllerCmdAsync<LeSetPhy>, P: PacketPool>(m
         if let Err(e) = runner.run().await {
             #[cfg(feature = "defmt")]
             let e = defmt::Debug2Format(&e);
-            error!("[ble_task] runner error: {:?}", e);
+            // Reboot rather than restart the runner: a restart sends an HCI
+            // Reset that leaves the old link recorded as Connected, so the
+            // peripheral would never advertise again. See ble/mod.rs.
+            error!("[ble_task] runner error, rebooting: {:?}", e);
             Timer::after_millis(100).await;
+            crate::boot::reboot_keyboard();
         }
     }
 }

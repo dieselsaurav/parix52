@@ -305,8 +305,15 @@ pub(crate) async fn ble_task<C: Controller + ControllerCmdAsync<LeSetPhy>, P: Pa
                 .run_with_handler(&crate::split::ble::central::ScanHandler {})
                 .await
             {
-                error!("[ble_task] runner.run_with_handler error");
+                // Do not restart the runner. A restart begins with an HCI
+                // Reset, which drops both links without Disconnection events,
+                // so trouble keeps them as Connected: the split manager never
+                // reconnects, both connection slots stay taken, and the host
+                // falls back to USB until a power cycle. A reboot brings both
+                // links back cleanly in about two seconds.
+                error!("[ble_task] runner error, rebooting");
                 embassy_time::Timer::after_millis(100).await;
+                crate::boot::reboot_keyboard();
             }
         }
     }
