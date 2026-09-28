@@ -13,8 +13,7 @@ priority for a write and an 11 ms one for a partial erase, with 1 ms of slack.
 A keyboard holding two 7.5 ms connection intervals plus advertising never has
 an 8.5 ms gap, so every request was refused and fell into the timeslot
 callback's retry path, which `assert!`s on the re-request result, and an
-overstayed slot `panic!`s. Both run in interrupt context: a hard fault, then
-the watchdog.
+overstayed slot `panic!`s. Either ends in a hard fault, then the watchdog.
 
 This went unnoticed because RMK's default 2-sector store is full after the
 first boot on any large keymap, so runtime writes fail early and never reach
@@ -26,4 +25,9 @@ the driver. Give the store room and the driver starts being used.
   priority request timeout 100 ms (was 30). Work now fits between connection
   events without pre-empting the radio.
 - The BLOCKED/CANCELLED re-request no longer asserts; an error is handed to
-  the waiting task. An OVERSTAYED slot reports an error instead of panicking.
+  the waiting task. OVERSTAYED also reports an error, but MPSL asserts after
+  that signal regardless, so an overstay still resets the chip; the slot
+  sizes are what prevent it.
+- Multi-page erase resets the per-page elapsed counter for every page.
+  Upstream carried it over, so pages after the first got one partial pulse
+  and a store wipe (erase_all) left them half-erased.

@@ -21,6 +21,12 @@ use crate::matrix::MatrixState;
 
 pub(crate) const HOLD_BUFFER_SIZE: usize = 16;
 
+/// The layer last published in a `LayerChangeEvent`. The split driver reads
+/// it to bring a (re)connecting peripheral up to date: events are only sent
+/// on change, so a peripheral that missed one would otherwise keep a stale
+/// layer (e.g. the DISPOFF layer) indefinitely.
+pub(crate) static ACTIVE_LAYER: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
 /// All allocated data needed to build a [`KeyMap`].
 pub struct KeymapData<const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_ENCODER: usize = 0> {
     /// Per-layer key actions
@@ -280,6 +286,7 @@ impl KeyMapInner<'_> {
         if self.num_layer > 3 {
             self.layer_state[3] = self.layer_state[1] && self.layer_state[2];
             let layer = self.get_activated_layer();
+            ACTIVE_LAYER.store(layer, core::sync::atomic::Ordering::Relaxed);
             publish_event(LayerChangeEvent::new(layer));
         }
     }
@@ -290,6 +297,7 @@ impl KeyMapInner<'_> {
                 self.layer_state[tri_layer[0] as usize] && self.layer_state[tri_layer[1] as usize];
         }
         let layer = self.get_activated_layer();
+        ACTIVE_LAYER.store(layer, core::sync::atomic::Ordering::Relaxed);
         publish_event(LayerChangeEvent::new(layer));
     }
 

@@ -22,6 +22,14 @@ product_id = 0x5052
 manufacturer = "Parix"
 chip = "nrf52840"
 
+# REG1 DC/DC on: the nice!nano v2 fits the inductor for it (ZMK enables the
+# same). RMK's nRF default runs the core from the LDO, which roughly doubles
+# the radio current at +8 dBm. REG0 stays off: it needs a second inductor the
+# module does not have.
+[chip.nrf52840]
+dcdc_reg0 = false
+dcdc_reg1 = true
+
 # ----------------------------------------------------------------------------
 # ble_profiles_num = 4 defines the User0..User7 keycodes on the MEDIA layer:
 #   User0-3 = select profile BT0-BT3, User4 = next, User5 = prev,

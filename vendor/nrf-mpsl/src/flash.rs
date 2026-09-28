@@ -450,6 +450,11 @@ impl FlashOp {
 
             *elapsed += ERASE_PARTIAL_PAGE_DURATION_US;
             if *elapsed > ERASE_PAGE_DURATION_US {
+                // Each page needs its own full 85 ms of partial erases. Upstream
+                // never reset this, so every page after the first got a single
+                // partial pulse and a multi-page erase (sequential-storage's
+                // erase_all, i.e. every store wipe) left them half-erased.
+                *elapsed = 0;
                 *address += PAGE_SIZE as u32;
                 if *address >= to {
                     return ControlFlow::Break(());

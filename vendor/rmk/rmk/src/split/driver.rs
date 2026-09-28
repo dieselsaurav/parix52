@@ -101,6 +101,29 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
         {
             return;
         }
+        // ...and the layer and sleep state, which are otherwise sent only on
+        // change. Without this a peripheral that was told "sleep" or was on
+        // the DISPOFF layer before the central restarted stays dark after it
+        // reconnects, since the fresh central has no change to report.
+        if self
+            .send(&SplitMessage::Layer(
+                crate::keymap::ACTIVE_LAYER.load(core::sync::atomic::Ordering::Relaxed),
+            ))
+            .await
+            .is_err()
+        {
+            return;
+        }
+        #[cfg(all(feature = "display", feature = "_ble"))]
+        if self
+            .send(&SplitMessage::SleepState(
+                crate::ble::SLEEPING_STATE.load(core::sync::atomic::Ordering::Acquire),
+            ))
+            .await
+            .is_err()
+        {
+            return;
+        }
 
         loop {
             // Use select_biased_with_feature to handle feature-gated subscriber arms

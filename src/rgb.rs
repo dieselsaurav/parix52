@@ -30,8 +30,9 @@ const NUM_LEDS: usize = 26;
 const BIT_TICKS: u16 = 20;
 /// Compare value for a WS2812 "0" bit (~0.375 us high). Bit 15 = polarity.
 const DUTY_ZERO: u16 = 0x8000 | 6;
-/// Compare value for a WS2812 "1" bit (~0.8125 us high).
-const DUTY_ONE: u16 = 0x8000 | 13;
+/// Compare value for a "1" bit (~0.75 us high). 12, not 13: the SK6812 allows
+/// at most 0.75 us for a one, and 13 ticks (0.81 us) was just outside it.
+const DUTY_ONE: u16 = 0x8000 | 12;
 /// All-low slots appended for the >50 us WS2812 reset latch.
 const RESET_SLOTS: usize = 64; // 80 us at 1.25 us/slot, the SK6812 minimum
 const BUF_LEN: usize = NUM_LEDS * 24 + RESET_SLOTS;
