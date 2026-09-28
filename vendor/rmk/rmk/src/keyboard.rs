@@ -346,9 +346,32 @@ impl<'a> Keyboard<'a> {
                     }
                 }
             }
-            // A buffered entry this arm does not handle must not spin the
-            // task: yield so the rest of the keyboard keeps running.
-            _ => yield_now().await,
+            // A buffered entry nothing above handles: a key that was buffered
+            // as tap-hold and then re-resolved to a plain key because a layer
+            // changed under it (hold a thumb layer key, roll onto a home-row
+            // mod). Upstream's `_ => ()` returned without awaiting, so the run
+            // loop picked the same entry again forever: a busy spin, then a
+            // watchdog reset. Merely yielding here was worse -- the task kept
+            // running but never read another key event, so the last key sent
+            // stayed down on the host and repeated. The entry has to leave the
+            // buffer. If the key was already released without ever firing,
+            // send it as a tap so the keystroke is not lost.
+            _ => {
+                if let Some(held) = self.held_buffer.remove(key.event.pos) {
+                    if let KeyState::Released(_) = held.state {
+                        let mut event = held.event;
+                        event.pressed = true;
+                        match held.action {
+                            KeyAction::Single(action) | KeyAction::Tap(action) => {
+                                self.process_key_action_tap(action, event).await;
+                            }
+                            _ => {}
+                        }
+                    }
+                } else {
+                    yield_now().await;
+                }
+            }
         }
     }
 
