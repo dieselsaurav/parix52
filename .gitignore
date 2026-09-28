@@ -10,3 +10,4 @@ target
 .claude/
 build/*.log
 build/*.rs
+*.zip

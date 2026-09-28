@@ -22,13 +22,14 @@ product_id = 0x5052
 manufacturer = "Parix"
 chip = "nrf52840"
 
-# REG1 DC/DC on: the nice!nano v2 fits the inductor for it (ZMK enables the
-# same). RMK's nRF default runs the core from the LDO, which roughly doubles
-# the radio current at +8 dBm. REG0 stays off: it needs a second inductor the
-# module does not have.
+# Both DC/DC converters OFF, which is RMK's nRF default. REG1 was switched on
+# for a build on 2026-09-28 to cut radio current, and the board never came up
+# after flashing: a module without the DC/DC inductor (nice!nano clones often
+# omit it) loses its core supply the moment the converter is enabled. Do not
+# enable either without confirming the inductor is fitted on the module.
 [chip.nrf52840]
 dcdc_reg0 = false
-dcdc_reg1 = true
+dcdc_reg1 = false
 
 # ----------------------------------------------------------------------------
 # ble_profiles_num = 4 defines the User0..User7 keycodes on the MEDIA layer:
