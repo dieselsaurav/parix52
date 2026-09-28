@@ -63,6 +63,15 @@ use embassy_time::{Duration, Instant, Ticker, Timer};
 
 /// How long to wait before asking an unresponsive display to init again.
 const INIT_RETRY_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Longest a single display transfer may take. A full 128x32 frame is about
+/// 50 ms at 100 kHz. The nRF I2C driver has no timeout of its own: with SCL
+/// or SDA held low (a solder bridge at the header, a module plugged in wrong)
+/// a transfer never ends. This task subscribes to every key event, so a
+/// transfer that never ends fills the 16-slot key queue and the matrix stops
+/// publishing: the last key sent stays down on the host and repeats. A stuck
+/// display must never cost the keyboard its keys.
+const IO_TIMEOUT: Duration = Duration::from_millis(250);
 use embedded_graphics::prelude::*;
 #[cfg(feature = "lcd_async")]
 pub use lcd_async;
@@ -350,7 +359,7 @@ where
                 self.pending_render = false;
                 return;
             }
-            if self.display.init().await {
+            if matches!(embassy_time::with_timeout(IO_TIMEOUT, self.display.init()).await, Ok(true)) {
                 self.initialized = true;
                 self.last_init_failure = None;
             } else {
@@ -364,7 +373,7 @@ where
 
         self.renderer.render(&self.ctx, &mut self.display);
         self.ctx.key_press_latch = false;
-        if !self.display.flush().await {
+        if !matches!(embassy_time::with_timeout(IO_TIMEOUT, self.display.flush()).await, Ok(true)) {
             // Bus error mid-life: re-init before the next render.
             self.initialized = false;
             self.last_init_failure = Some(Instant::now());
