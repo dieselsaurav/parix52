@@ -5,10 +5,13 @@
 //! Wiring (from the paraboard netlist, read off the fabbed boards): 26
 //! SK6812MINI-E per half, one under every key and no underglow, fed from
 //! VCC, data in on net RGB_DI = pro_micro D0 = P0.08, GRB wire order. The
-//! SK6812 takes the same 800 kHz one-wire protocol as the WS2812.
+//! SK6812 takes the same 800 kHz one-wire protocol as the WS2812. (GRB was
+//! confirmed on the right half 2026-10-01: sent as RGB, letters came out
+//! green and digits red. A green Q on the left was a chain fault, not order.)
 //!
 //! Behavior:
-//!   - static color per active layer (dim palette — battery first)
+//!   - a colour per key for the active layer, from `rgb_map` (dim palette,
+//!     battery first)
 //!   - LEDs off while the half is sleeping (ZMK RGB_UNDERGLOW_AUTO_OFF_IDLE)
 //!   - layer 7 (DISPOFF, TG(7) on MEDIA) doubles as the RGB kill switch
 //!
@@ -24,8 +27,8 @@ use embassy_nrf::pwm::{
 use rmk::event::{LayerChangeEvent, SleepStateEvent};
 use rmk::macros::processor;
 
-/// Number of LEDs on one half: one per key, 26.
-const NUM_LEDS: usize = 26;
+use crate::rgb_map::{self, NUM_LEDS, Side};
+
 /// PWM ticks (16 MHz) per WS2812 bit: 20 ticks = 1.25 us = 800 kHz.
 const BIT_TICKS: u16 = 20;
 /// Compare value for a WS2812 "0" bit (~0.375 us high). Bit 15 = polarity.
@@ -37,29 +40,21 @@ const DUTY_ONE: u16 = 0x8000 | 12;
 const RESET_SLOTS: usize = 64; // 80 us at 1.25 us/slot, the SK6812 minimum
 const BUF_LEN: usize = NUM_LEDS * 24 + RESET_SLOTS;
 
-/// (r, g, b) per layer — deliberately dim (~12% peak vs ZMK's BRT_MAX 60%)
-/// to keep battery draw sane. Index = layer number.
-const LAYER_COLORS: [(u8, u8, u8); 8] = [
-    (28, 18, 8),  // 0 BASE  — warm white
-    (0, 10, 30),  // 1 NAV   — blue
-    (0, 28, 6),   // 2 NUM   — green
-    (22, 0, 28),  // 3 MEDIA — purple
-    (30, 12, 0),  // 4 SYM   — orange
-    (30, 2, 2),   // 5 FUN   — red
-    (0, 22, 22),  // 6 MOUSE — cyan
-    (0, 0, 0),    // 7 DISPOFF — off (RGB kill switch, same toggle as OLEDs)
-];
-
 #[processor(subscribe = [LayerChangeEvent, SleepStateEvent])]
 pub struct RgbProcessor {
     pwm: SequencePwm<'static>,
     buf: [u16; BUF_LEN],
+    side: Side,
     layer: u8,
     sleeping: bool,
 }
 
 impl RgbProcessor {
-    pub fn new(pwm: Peri<'static, impl Instance>, pin: Peri<'static, impl GpioPin>) -> Self {
+    pub fn new(
+        pwm: Peri<'static, impl Instance>,
+        pin: Peri<'static, impl GpioPin>,
+        side: Side,
+    ) -> Self {
         let mut config = Config::default();
         config.prescaler = Prescaler::Div1; // 16 MHz
         config.max_duty = BIT_TICKS;
@@ -68,20 +63,21 @@ impl RgbProcessor {
         Self {
             pwm,
             buf: [0x8000; BUF_LEN],
+            side,
             layer: 0,
             sleeping: false,
         }
     }
 
-    /// Encode the current color into the PWM duty buffer (GRB wire order).
+    /// Encode each key's color into the PWM duty buffer (GRB wire order).
     fn fill_buffer(&mut self) {
-        let (r, g, b) = if self.sleeping {
-            (0, 0, 0)
-        } else {
-            LAYER_COLORS[(self.layer as usize).min(LAYER_COLORS.len() - 1)]
-        };
         let mut i = 0;
-        for _ in 0..NUM_LEDS {
+        for led in 0..NUM_LEDS {
+            let (r, g, b) = if self.sleeping {
+                (0, 0, 0)
+            } else {
+                rgb_map::color(self.side, self.layer, led)
+            };
             for byte in [g, r, b] {
                 for bit in (0..8).rev() {
                     self.buf[i] = if (byte >> bit) & 1 == 1 { DUTY_ONE } else { DUTY_ZERO };
