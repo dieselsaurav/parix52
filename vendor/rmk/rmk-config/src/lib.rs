@@ -866,6 +866,7 @@ pub struct InputDeviceConfig {
     pub pmw3610: Option<Vec<Pmw3610Config>>,
     pub pmw33xx: Option<Vec<Pmw33xxConfig>>,
     pub iqs5xx: Option<Vec<Iqs5xxConfig>>,
+    pub pinnacle: Option<Vec<PinnacleConfig>>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -968,6 +969,82 @@ pub struct Pmw33xxConfig {
     /// Report rate (Hz). Motion will be accumulated and emitted at this rate.
     #[serde(default = "default_pointing_report_hz")]
     pub report_hz: u16,
+}
+
+/// Cirque Pinnacle (GlidePoint TM0x00x0) trackpad over SPI, relative mode.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinnacleConfig {
+    /// Name of the trackpad (used for variable naming).
+    pub name: String,
+    /// RMK pointing-device id (0-255). Defaults to 0.
+    pub id: Option<u8>,
+    /// SPI instance and pins; `cs` is required. Mode 1, 2 MHz.
+    pub spi: SpiConfig,
+    /// Optional data-ready pin (J1 pin 4 / pad "DR"). Without it the driver
+    /// polls the pad's status register.
+    pub dr: Option<String>,
+    /// Invert X at the pad.
+    #[serde(default)]
+    pub invert_x: bool,
+    /// Invert Y at the pad.
+    #[serde(default)]
+    pub invert_y: bool,
+    /// Pad fitted with Cirque's curved overlay (part -303): applies Cirque's
+    /// ADC attenuation and edge-sensitivity values for it.
+    #[serde(default)]
+    pub curved_overlay: bool,
+    /// Let the pad sleep after ~5 s without a finger. Default true.
+    #[serde(default = "default_true")]
+    pub sleep: bool,
+    /// Scroll ring: the outer band of the pad acts as a mouse wheel.
+    #[serde(default)]
+    pub scroll_ring: bool,
+    /// Ring width, percent of the radius. Default 15.
+    #[serde(default = "default_ring_width_percent")]
+    pub ring_width_percent: u8,
+    /// Degrees of travel around the ring per wheel tick. Default 15.
+    #[serde(default = "default_ring_degrees_per_tick")]
+    pub ring_degrees_per_tick: u8,
+    /// Flip the ring's scroll direction.
+    #[serde(default)]
+    pub ring_invert: bool,
+    /// Absolute-mode cursor speed: pad units per cursor count. Default 3.
+    #[serde(default = "default_cursor_divisor")]
+    pub cursor_divisor: u8,
+    /// Report rate (Hz). Motion is accumulated and emitted at this rate.
+    #[serde(default = "default_pointing_report_hz")]
+    pub report_hz: u16,
+    /// Invert X in the PointingProcessor.
+    #[serde(default)]
+    pub proc_invert_x: bool,
+    /// Invert Y in the PointingProcessor.
+    #[serde(default)]
+    pub proc_invert_y: bool,
+    /// Swap X and Y in the PointingProcessor.
+    #[serde(default)]
+    pub proc_swap_xy: bool,
+    /// Layer held active while the pad is in use (mouse buttons on keys).
+    pub auto_layer: Option<u8>,
+    /// Milliseconds after the last motion before `auto_layer` is released.
+    #[serde(default = "default_auto_layer_timeout_ms")]
+    pub auto_layer_timeout_ms: u16,
+}
+
+const fn default_auto_layer_timeout_ms() -> u16 {
+    650
+}
+
+const fn default_ring_width_percent() -> u8 {
+    15
+}
+
+const fn default_ring_degrees_per_tick() -> u8 {
+    15
+}
+
+const fn default_cursor_divisor() -> u8 {
+    3
 }
 
 /// Azoteq IQS5xx trackpad configuration.

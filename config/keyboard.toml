@@ -314,17 +314,42 @@ matrix_type = "normal"
 row_pins = ["P0_22", "P0_24", "P1_00", "P0_11", "P1_04"]
 col_pins = ["P1_11", "P1_13", "P1_15", "P0_02", "P0_29", "P0_31"]
 
-# Right (peripheral) display — Parix screen: glitching P keycap logo, split-
-# link status, battery (port of the ZMK custom_status_screen.c from the corne
-# shield). Landscape (rotation 0), 150 ms tick drives the glitch animation.
-[split.peripheral.display]
-driver = "ssd1306"
-size = "128x32"
-rotation = 0
-renderer = "crate::parix::ParixRenderer"
-render_interval = 150
+# Right (peripheral): Cirque TM040040-2024-303 trackpad on the display header,
+# in place of the OLED. SPI build (R1 fitted), curved overlay. Pad "SCK" ->
+# header pad 2 (P0.20), "SI" -> pad 1 (P0.17), "SS" -> pad 5 (P0.06), "SO" ->
+# nice!nano D9 (P1.06), "DR" -> D10 (P0.09, NFC pin used as GPIO); VDD/GND on
+# pads 3/4. DR is wired (PCB label P10): the driver reads one packet per
+# data-ready pulse instead of polling the status register.
+# Orientation measured on the desk 2026-10-01: the pad is mounted with its
+# X axis along the finger's up/down, so the axes are swapped and both
+# inverted. (Processor order: invert, then swap.)
+[[split.peripheral.input_device.pinnacle]]
+name = "trackpad"
+id = 0
+# curved_overlay applies Cirque's gain/edge values for their curved overlay.
+# Required: with it off the pad does not see a finger through the -303
+# overlay at all (tested 2026-10-01).
+curved_overlay = true
+dr = "P0_09"
+# Touching the pad holds the MOUSE layer (6) for 650 ms after the last motion:
+# right thumbs become left / right click, right home row the wheel keys.
+auto_layer = 6
+auto_layer_timeout_ms = 650
+# Scroll ring: the outer 25 % of the pad (a 5 mm band) is a wheel, one tick
+# per 15 degrees, clockwise = scroll down. The gesture is fixed where the
+# touch begins. The pad runs in absolute mode for this and the cursor speed
+# comes from cursor_divisor (higher = slower).
+scroll_ring = true
+ring_width_percent = 25
+ring_degrees_per_tick = 15
+cursor_divisor = 3
+proc_swap_xy = true
+proc_invert_x = true
+proc_invert_y = true
 
-[split.peripheral.display.protocol.i2c]
+[split.peripheral.input_device.pinnacle.spi]
 instance = "TWISPI0"
-sda = "P0_17"
-scl = "P0_20"
+sck = "P0_20"
+mosi = "P0_17"
+miso = "P1_06"
+cs = "P0_06"

@@ -8,7 +8,7 @@ use rmk_macro::{input_device, processor};
 use rmk_types::keycode::HidKeyCode;
 use usbd_hid::descriptor::MouseReport;
 
-use crate::channel::send_hid_report;
+use crate::channel::{send_hid_report, try_send_hid_report};
 use crate::event::{Axis, AxisEvent, AxisValType, PointingEvent, PointingProcessorEvent, PointingSetCpiEvent};
 use crate::hid::{KeyboardReport, Report};
 use crate::keymap::KeyMap;
@@ -49,6 +49,11 @@ pub trait PointingDriver {
     async fn read_motion(&mut self) -> Result<MotionData, PointingDriverError>;
     fn motion_pending(&mut self) -> bool;
     fn motion_gpio(&mut self) -> Option<&mut Self::MOTION>;
+    /// Wheel ticks produced since the last call (positive = scroll up), for
+    /// drivers that derive scrolling themselves, e.g. a trackpad's scroll ring.
+    fn take_wheel(&mut self) -> i16 {
+        0
+    }
     async fn set_resolution(&mut self, _cpi: u16) -> Result<(), PointingDriverError> {
         debug!("set_resolution() is not implemented for this sensor.");
         Err(PointingDriverError::NotImplementedError)
@@ -79,6 +84,7 @@ pub struct PointingDevice<S: PointingDriver> {
     pub last_report: Instant,
     pub accumulated_x: i32,
     pub accumulated_y: i32,
+    pub accumulated_wheel: i32,
 }
 
 impl<S: PointingDriver> PointingDevice<S> {
@@ -137,6 +143,7 @@ impl<S: PointingDriver> PointingDevice<S> {
             Ok(motion) => {
                 self.accumulated_x = self.accumulated_x.saturating_add(motion.dx as i32);
                 self.accumulated_y = self.accumulated_y.saturating_add(motion.dy as i32);
+                self.accumulated_wheel = self.accumulated_wheel.saturating_add(self.sensor.take_wheel() as i32);
             }
             Err(_e) => {
                 warn!("PointingDevice {}: Read motion error", self.id);
@@ -145,15 +152,17 @@ impl<S: PointingDriver> PointingDevice<S> {
     }
 
     fn take_report_event(&mut self) -> Option<PointingEvent> {
-        if self.accumulated_x == 0 && self.accumulated_y == 0 {
+        if self.accumulated_x == 0 && self.accumulated_y == 0 && self.accumulated_wheel == 0 {
             return None;
         }
 
         let dx = self.accumulated_x.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
         let dy = self.accumulated_y.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+        let dz = self.accumulated_wheel.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
 
         self.accumulated_x = 0;
         self.accumulated_y = 0;
+        self.accumulated_wheel = 0;
 
         Some(PointingEvent {
             device_id: self.id,
@@ -171,7 +180,7 @@ impl<S: PointingDriver> PointingDevice<S> {
                 AxisEvent {
                     typ: AxisValType::Rel,
                     axis: Axis::Z,
-                    value: 0,
+                    value: dz,
                 },
             ],
         })
@@ -224,7 +233,7 @@ impl<S: PointingDriver> PointingDevice<S> {
             };
 
             let report_wait = async {
-                if self.accumulated_x != 0 || self.accumulated_y != 0 {
+                if self.accumulated_x != 0 || self.accumulated_y != 0 || self.accumulated_wheel != 0 {
                     Timer::after(
                         self.report_interval
                             .checked_sub(self.last_report.elapsed())
@@ -485,6 +494,12 @@ pub struct PointingProcessorConfig {
     pub invert_y: bool,
     /// Swap X and Y axes (applied to all modes before mode-specific processing)
     pub swap_xy: bool,
+    /// Layer to hold active while the pointer moves, so the keys near the
+    /// pad become mouse buttons; released `auto_layer_timeout` after the
+    /// last motion. `None` disables it.
+    pub auto_layer: Option<u8>,
+    /// How long the auto layer stays on after the last motion.
+    pub auto_layer_timeout: Duration,
 }
 
 impl Default for PointingProcessorConfig {
@@ -494,12 +509,14 @@ impl Default for PointingProcessorConfig {
             invert_x: false,
             invert_y: false,
             swap_xy: false,
+            auto_layer: None,
+            auto_layer_timeout: Duration::from_millis(650),
         }
     }
 }
 
 /// PointingProcessor that converts motion events to mouse reports
-#[processor(subscribe = [PointingEvent, PointingProcessorEvent])]
+#[processor(subscribe = [PointingEvent, PointingProcessorEvent], poll_interval = 50)]
 pub struct PointingProcessor<'a> {
     /// Reference to the keymap (used for mouse_buttons)
     keymap: &'a KeyMap<'a>,
@@ -508,6 +525,8 @@ pub struct PointingProcessor<'a> {
     accumulator: MotionAccumulator,
     /// current active mode
     current_mode: PointingMode,
+    /// The auto layer is on, and when it should go off if no motion comes.
+    auto_layer_until: Option<Instant>,
 }
 
 impl<'a> PointingProcessor<'a> {
@@ -518,6 +537,29 @@ impl<'a> PointingProcessor<'a> {
             config,
             accumulator: MotionAccumulator::default(),
             current_mode: PointingMode::default(),
+            auto_layer_until: None,
+        }
+    }
+
+    /// Motion seen: switch the auto layer on (first time) and push its deadline.
+    fn touch_auto_layer(&mut self) {
+        if let Some(layer) = self.config.auto_layer {
+            if self.auto_layer_until.is_none() {
+                self.keymap.activate_layer(layer);
+            }
+            self.auto_layer_until = Some(Instant::now() + self.config.auto_layer_timeout);
+        }
+    }
+
+    /// Every 50 ms: drop the auto layer once its deadline has passed. A key
+    /// pressed on it and still held is safe: releases resolve against the
+    /// layer the press was made on.
+    async fn poll(&mut self) {
+        if let (Some(layer), Some(until)) = (self.config.auto_layer, self.auto_layer_until)
+            && Instant::now() >= until
+        {
+            self.keymap.deactivate_layer(layer);
+            self.auto_layer_until = None;
         }
     }
 
@@ -536,13 +578,34 @@ impl<'a> PointingProcessor<'a> {
 
         let mut x = 0i16;
         let mut y = 0i16;
+        let mut z = 0i16;
 
         for axis_event in event.axes.iter() {
             match axis_event.axis {
                 Axis::X => x = axis_event.value,
                 Axis::Y => y = axis_event.value,
+                Axis::Z => z = axis_event.value,
                 _ => {}
             }
+        }
+
+        if x != 0 || y != 0 || z != 0 {
+            self.touch_auto_layer();
+        }
+
+        // Z is a wheel the device computed itself (a trackpad's scroll ring).
+        // It goes straight out as a wheel report, untouched by the modes.
+        if z != 0 {
+            try_send_hid_report(Report::MouseReport(MouseReport {
+                buttons: 0,
+                x: 0,
+                y: 0,
+                wheel: z.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
+                pan: 0,
+            }));
+        }
+        if x == 0 && y == 0 {
+            return;
         }
 
         // Apply global config transforms (before mode-specific processing).
@@ -623,7 +686,12 @@ impl<'a> PointingProcessor<'a> {
                     _ => unreachable!(),
                 };
 
-                send_hid_report(Report::MouseReport(mouse_report)).await;
+                // Drop, never queue: the mouse shares the report queue with the
+                // keyboard, and a pointer streaming at 100 Hz into a slow link
+                // held every key release behind it until the OS auto-repeated
+                // (2026-10-01). A lost mouse delta is invisible; a late key
+                // release is not.
+                try_send_hid_report(Report::MouseReport(mouse_report));
             }
             PointingMode::Caret(caret_config) => {
                 if let Some((keycode, count)) = compute_caret_taps(x, y, &mut self.accumulator, &caret_config) {
@@ -882,6 +950,7 @@ mod tests {
             last_report: Instant::MIN,
             accumulated_x: 0,
             accumulated_y: 0,
+            accumulated_wheel: 0,
         };
 
         let mut result = false;
@@ -924,6 +993,7 @@ mod tests {
             last_report: Instant::MIN,
             accumulated_x: 0,
             accumulated_y: 0,
+            accumulated_wheel: 0,
         };
 
         // Run the async try_init
@@ -957,6 +1027,7 @@ mod tests {
             last_report: Instant::MIN,
             accumulated_x: 0,
             accumulated_y: 0,
+            accumulated_wheel: 0,
         };
 
         let inited = block_on(device.try_init());
@@ -990,6 +1061,7 @@ mod tests {
             last_report: Instant::MIN,
             accumulated_x: 0,
             accumulated_y: 0,
+            accumulated_wheel: 0,
             id: 1,
         };
 
@@ -1026,6 +1098,7 @@ mod tests {
             last_report: Instant::MIN,
             accumulated_x: 0,
             accumulated_y: 0,
+            accumulated_wheel: 0,
         };
 
         let start = Instant::now();

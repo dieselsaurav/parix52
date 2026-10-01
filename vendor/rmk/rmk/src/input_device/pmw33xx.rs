@@ -751,6 +751,7 @@ where
             last_report: Instant::MIN,
             accumulated_x: 0,
             accumulated_y: 0,
+            accumulated_wheel: 0,
         }
     }
 
@@ -783,6 +784,7 @@ where
             last_report: Instant::MIN,
             accumulated_x: 0,
             accumulated_y: 0,
+            accumulated_wheel: 0,
         }
     }
 }

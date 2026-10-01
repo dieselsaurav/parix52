@@ -5,6 +5,9 @@ use rmk::macros::rmk_peripheral;
 
 mod bitmaps;
 mod layer_names;
+// The right OLED gave way to the trackpad; the Parix screen stays for a
+// board that fits one again.
+#[allow(dead_code)]
 mod parix;
 mod rgb;
 mod rgb_map;

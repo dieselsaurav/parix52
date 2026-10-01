@@ -18,6 +18,7 @@ use crate::codegen::import::expand_custom_imports;
 use crate::codegen::input_device::adc::expand_adc_device;
 use crate::codegen::input_device::encoder::expand_encoder_device;
 use crate::codegen::input_device::iqs5xx::{expand_iqs5xx_device, expand_iqs5xx_interrupts};
+use crate::codegen::input_device::pinnacle::{expand_pinnacle_device, expand_pinnacle_interrupts};
 use crate::codegen::input_device::pmw33xx::expand_pmw33xx_device;
 use crate::codegen::input_device::pmw3610::expand_pmw3610_device;
 use crate::codegen::keyboard_config::read_keyboard_toml_config;
@@ -132,6 +133,14 @@ fn expand_bind_interrupt_for_split_peripheral(
                 .pmw33xx
                 .unwrap_or(Vec::new());
 
+            let pinnacle_config = split_config.peripheral[peripheral_id]
+                .input_device
+                .clone()
+                .unwrap_or(InputDeviceConfig::default())
+                .pinnacle
+                .unwrap_or(Vec::new());
+            let pinnacle_interrupt = expand_pinnacle_interrupts(&pinnacle_config);
+
             // Generate SPI interrupts for each sensor
             let mut pmw33xx_spi_interrupts = Vec::new();
 
@@ -170,6 +179,7 @@ fn expand_bind_interrupt_for_split_peripheral(
                     TIMER0 => ::nrf_sdc::mpsl::HighPrioInterruptHandler;
                     RTC0 => ::nrf_sdc::mpsl::HighPrioInterruptHandler;
                     #pmw33xx_spi_interrupts
+                    #pinnacle_interrupt
                     #iqs5xx_interrupt
                     #display_interrupt
                 });
@@ -632,6 +642,25 @@ pub(crate) fn expand_peripheral_input_device_config(
     };
 
     for initializer in pmw33xx_devices {
+        initializations.extend(initializer.initializer);
+        let device_name = initializer.var_name;
+        devices.push(quote! { #device_name });
+    }
+
+    // generate Pinnacle configuration
+    let (pinnacle_devices, _pinnacle_processors) = match board {
+        BoardConfig::Split(split_config) => expand_pinnacle_device(
+            split_config.peripheral[id]
+                .input_device
+                .clone()
+                .unwrap_or(InputDeviceConfig::default())
+                .pinnacle
+                .unwrap_or(Vec::new()),
+            chip,
+        ),
+        _ => (vec![], vec![]),
+    };
+    for initializer in pinnacle_devices {
         initializations.extend(initializer.initializer);
         let device_name = initializer.var_name;
         devices.push(quote! { #device_name });

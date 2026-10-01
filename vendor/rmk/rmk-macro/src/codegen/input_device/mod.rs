@@ -2,6 +2,7 @@ use adc::expand_adc_device;
 use encoder::expand_encoder_device;
 use iqs5xx::expand_iqs5xx_device;
 use pmw33xx::expand_pmw33xx_device;
+use pinnacle::expand_pinnacle_device;
 use pmw3610::expand_pmw3610_device;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -13,6 +14,7 @@ use rmk_config::resolved::hardware::{
 pub(crate) mod adc;
 pub(crate) mod encoder;
 pub(crate) mod iqs5xx;
+pub(crate) mod pinnacle;
 pub(crate) mod pmw33xx;
 pub(crate) mod pmw3610;
 
@@ -236,6 +238,50 @@ pub(crate) fn expand_input_device_config(
                 expand_pmw33xx_device(peripheral_pmw33xx_config, chip);
 
             for initializer in peripheral_pmw33xx_processors {
+                initialization.extend(initializer.initializer);
+                let processor_name = initializer.var_name;
+                processors.push(quote! { #processor_name });
+            }
+        }
+    }
+
+    // generate Pinnacle configuration: devices on the half that carries the pad,
+    // a processor on the central for every pad on any half.
+    let (pinnacle_device_initializers, pinnacle_processor_initializers) = match board {
+        BoardConfig::UniBody(UniBodyConfig { input_device, .. }) => {
+            expand_pinnacle_device(input_device.clone().pinnacle.unwrap_or(Vec::new()), chip)
+        }
+        BoardConfig::Split(split_config) => expand_pinnacle_device(
+            split_config
+                .central
+                .input_device
+                .clone()
+                .unwrap_or(InputDeviceConfig::default())
+                .pinnacle
+                .unwrap_or(Vec::new()),
+            chip,
+        ),
+    };
+    for initializer in pinnacle_device_initializers {
+        initialization.extend(initializer.initializer);
+        let device_name = initializer.var_name;
+        devices.push(quote! { #device_name });
+    }
+    for initializer in pinnacle_processor_initializers {
+        initialization.extend(initializer.initializer);
+        let processor_name = initializer.var_name;
+        processors.push(quote! { #processor_name });
+    }
+    if let BoardConfig::Split(split_config) = board {
+        for peripheral in &split_config.peripheral {
+            let peripheral_pinnacle_config = peripheral
+                .input_device
+                .clone()
+                .unwrap_or(InputDeviceConfig::default())
+                .pinnacle
+                .unwrap_or(Vec::new());
+            let (_, peripheral_pinnacle_processors) = expand_pinnacle_device(peripheral_pinnacle_config, chip);
+            for initializer in peripheral_pinnacle_processors {
                 initialization.extend(initializer.initializer);
                 let processor_name = initializer.var_name;
                 processors.push(quote! { #processor_name });
