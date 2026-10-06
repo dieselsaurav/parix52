@@ -1294,6 +1294,20 @@ impl<'a> Keyboard<'a> {
                 self.update_osl(event);
             }
             Action::TriggerMacro(macro_idx) => self.execute_macro(macro_idx, event).await,
+            // Modifiers with no key (`WM(No, ...)`, e.g. a Hyper key) are a
+            // modifier key and nothing else, so they are held like one. The
+            // generic path below keeps `with_modifiers` only until the next
+            // key press, which is right for Shift+1 on one key and made
+            // Hyper+G arrive at the host as a bare G.
+            Action::KeyWithModifier(KeyCode::Hid(HidKeyCode::No), modifiers) => {
+                if event.pressed {
+                    self.register_modifiers(modifiers);
+                } else {
+                    self.unregister_modifiers(modifiers);
+                }
+                self.send_keyboard_report_with_resolved_modifiers(event.pressed).await;
+                self.update_osl(event);
+            }
             Action::KeyWithModifier(key_code, modifiers) => {
                 if event.pressed {
                     // These modifiers will be combined into the hid report, so

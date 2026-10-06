@@ -320,9 +320,10 @@ col_pins = ["P1_11", "P1_13", "P1_15", "P0_02", "P0_29", "P0_31"]
 # nice!nano D9 (P1.06), "DR" -> D10 (P0.09, NFC pin used as GPIO); VDD/GND on
 # pads 3/4. DR is wired (PCB label P10): the driver reads one packet per
 # data-ready pulse instead of polling the status register.
-# Orientation measured on the desk 2026-10-01: the pad is mounted with its
-# X axis along the finger's up/down, so the axes are swapped and both
-# inverted. (Processor order: invert, then swap.)
+# Orientation measured on the desk: the pad is mounted with its X axis along
+# the finger's up/down, so the axes are swapped. 2026-10-03: the pad now sits
+# with its notched corner at the TOP; with that, X is not inverted (it was
+# with the notch at the bottom). (Processor order: invert, then swap.)
 [[split.peripheral.input_device.pinnacle]]
 name = "trackpad"
 id = 0
@@ -344,7 +345,7 @@ ring_width_percent = 25
 ring_degrees_per_tick = 15
 cursor_divisor = 3
 proc_swap_xy = true
-proc_invert_x = true
+proc_invert_x = false
 proc_invert_y = true
 
 [split.peripheral.input_device.pinnacle.spi]
