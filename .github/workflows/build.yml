@@ -1,12 +1,15 @@
-name: Build RMK firmware
+name: Build firmware and keymap
 
 on:
   push:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  firmware:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,14 +26,61 @@ jobs:
       - name: Install cargo-make
         run: cargo install cargo-make
 
-      - name: Build UF2 firmware (central + peripheral)
+      - name: Build UF2 firmware (central + peripheral + reset)
         run: cargo make uf2
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: parix52-rmk-firmware
+          name: parix52-firmware-${{ github.sha }}
           path: |
             build/parix52-rmk-central.uf2
             build/parix52-rmk-peripheral.uf2
             build/parix52-rmk-reset.uf2
+
+      # Every push to main refreshes the "latest" release, so the download
+      # links in the README always point at firmware built from main's head.
+      - name: Publish the latest firmware release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes 2>/dev/null || true
+          gh release create latest \
+            --title "Parix 52 firmware (latest from main)" \
+            --notes "Built from ${{ github.sha }}. Flash parix52-rmk-central.uf2 on the LEFT half and parix52-rmk-peripheral.uf2 on the RIGHT half; see the README." \
+            build/parix52-rmk-central.uf2 \
+            build/parix52-rmk-peripheral.uf2 \
+            build/parix52-rmk-reset.uf2
+
+  keymap:
+    # Redraw docs/keymap.svg from keyboard.toml after every push and commit it
+    # back in the pusher's name, so the picture in the README is never stale.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install keymap-drawer
+        run: pip install keymap-drawer==0.23.0
+
+      - name: Draw the keymap
+        run: python3 scripts/keymap_docs.py --out docs/keymap.svg
+
+      - name: Commit the keymap if it changed
+        run: |
+          if git diff --quiet -- docs/keymap.svg; then
+            echo "keymap unchanged"
+            exit 0
+          fi
+          git config user.name "$(git log -1 --format=%an)"
+          git config user.email "$(git log -1 --format=%ae)"
+          git add docs/keymap.svg
+          git commit -m "docs: keymap drawn from $(git rev-parse --short HEAD) [skip ci]"
+          git push

@@ -1,127 +1,238 @@
-# parix52-rmk
+# Parix 52
 
-[RMK](https://github.com/HaoboGu/rmk) (Rust) firmware for the **Parix 52** — a 52-key
-Voyager-spaced wireless Choc split. nRF52840 Pro Micro (nice!nano v2 or SuperMini), BLE
-split, SSD1306 OLEDs, 26 per-key SK6812MINI-E per half, battery reporting, Vial.
+Firmware for the **Parix 52**, a 52-key wireless split keyboard with the ZSA Voyager's
+layout, low-profile Choc switches, per-key lighting and a trackpad on the right half.
+It runs [RMK](https://github.com/HaoboGu/rmk), a keyboard firmware written in Rust, on
+an nRF52840 controller in each half. The two halves talk to each other over Bluetooth,
+and the keyboard talks to your computer over Bluetooth or USB.
 
-Hardware lives in [dieselsaurav/paraboard](https://github.com/dieselsaurav/paraboard) —
-`paraboard` is the design source, Parix 52 is the keyboard. Ported from
-[parix-rmk-corne](https://github.com/dieselsaurav/parix-rmk-corne), which carries the
-same MCU, displays and RGB approach; what changed is the matrix, the pins and the keymap.
+This page is the manual. The hardware design (PCB, case) lives in
+[dieselsaurav/paraboard](https://github.com/dieselsaurav/paraboard).
 
-## Hardware map
+- [The keymap](#the-keymap)
+- [Connecting: USB and Bluetooth](#connecting-usb-and-bluetooth)
+- [The trackpad](#the-trackpad)
+- [Lights and screens](#lights-and-screens)
+- [Battery](#battery)
+- [Changing the keymap with Vial](#changing-the-keymap-with-vial)
+- [Updating the firmware](#updating-the-firmware)
+- [If something goes wrong](#if-something-goes-wrong)
+- [Building from source](#building-from-source)
+- [Hardware reference](#hardware-reference)
 
-Read off the fabbed boards' netlist, not from the schematic's intent.
+## The keymap
 
-| | Pro Micro | nRF52840 |
+![Parix 52 keymap](docs/keymap.svg)
+
+The drawing above is generated from the firmware's own keymap file after every change,
+so it is always what the keyboard ships with. Download it at full size:
+[docs/keymap.svg](docs/keymap.svg).
+
+**How to read it.** A small word under a key is what the key does when **held**: the
+home row holds modifiers (A = Cmd, S = Opt, D = Ctrl, F = Shift, mirrored on the right),
+and the four thumb keys and the two outer corners of the number row each hold a layer.
+Keys drawn between two keys are **combos**: press both together.
+
+| Layer | Hold | What is on it |
 |---|---|---|
-| Rows R0–R4 | 4, 5, 6, 7, 8 | P0.22, P0.24, P1.00, P0.11, P1.04 |
-| Columns C0–C5 | 21, 20, 19, 18, 15, 14 | P0.31, P0.29, P0.02, P1.15, P1.13, P1.11 |
-| RGB data in | 0 | **P0.08** (the Corne uses P0.06) |
-| OLED SDA / SCL | 2, 3 | P0.17, P0.20 |
+| **BASE** | – | QWERTY, number row, Hyper (⌃⌥⇧⌘) on the right pinky |
+| **NAV** | Tab (left thumb) | Arrows on H J K L, Home/End/PgUp/PgDn, Cmd-Z/X/C/V, Caps Lock |
+| **NUM** | Backspace (right thumb) | Number pad on the left hand, brackets and symbols around it |
+| **SYM** | Enter (right thumb) | The same positions as NUM, shifted: `{ } ( ) & * ! @` … |
+| **MEDIA** | Space (left thumb) | Volume, media, brightness, Bluetooth, USB/BT switch, lights off |
+| **FUN** | `-` (top right) | F1–F12 on the left hand, Print Screen, Scroll Lock, Pause |
+| **MOUSE** | `` ` `` (top left) | Cursor and wheel keys, mouse buttons on the right thumbs; also switched on by the trackpad |
+| **DISPOFF** | Space + Y toggles | Nothing: lights and screens go dark |
 
-5 rows × 6 columns per half, COL2ROW. **C0 is the outer column on both halves**, so the
-right half lists its column pins in reverse and the combined 5 × 12 matrix reads left to
-right. Row 4 is the thumb row and uses only two columns: the near-grid thumb is on **C5**,
-the far 1.5u thumb on **C4**. Left half = central.
+**Combos** (press together): Q+W = Esc, O+P = Backspace, F+J = Caps Word, X+C = Cmd-C,
+C+V = Cmd-V, X+V = Cmd-X, J+M = `-`, H+N = `_`, F+V = `=`, S+X = `` ` ``, L+' = `;`.
 
-## Layout
+**Tap-hold timing.** A home-row key is a letter when tapped and a modifier when held
+(about 200 ms), and it never becomes a modifier for a key on the same hand, so rolling
+"as" or "df" types the letters. The thumb layer keys work the same way but do become
+layers when the next key follows quickly.
 
-The Corne's seven Miryoku-style layers, carried over with its home-row mods and all 14
-combos intact — rows 1–3 here are the Corne's three rows token for token, which is what
-keeps the combos bound. Two things had to change:
+## Connecting: USB and Bluetooth
 
-- **A number row on top** (row 0). `F1`–`F12` sit on it in the FUN layer.
-- **Two thumbs a side instead of three.** Kept: `Space`=NAV and `Escape`=MEDIA on the
-  left, `Backspace`=NUM and `Enter`=SYM on the right. MEDIA had to survive, since every
-  Bluetooth key lives there. The two layer-taps that lost their thumbs moved to the number
-  row's outer corners: hold **`` ` ``** for MOUSE, hold **`-`** for FUN, each on the hand
-  opposite the layer it opens.
+The **left half is the brain**: it connects to the computer and runs the keymap. The
+right half connects to the left over Bluetooth by itself; nothing to pair there.
 
-This is a starting keymap, not a considered one — it is editable live in
-[Vial](https://vial.rocks). Unlock by holding the two left thumb keys. BLE keys on MEDIA:
-User0-3 = profile BT0-BT3, User6 = clear bond, User7 = toggle USB/BLE output.
+- **USB:** plug the left half in. It types over USB whenever Bluetooth is not connected.
+- **Bluetooth:** pair "Parix 52" in your computer's Bluetooth settings. Four computers can
+  be remembered, one per profile. With Space held:
 
-The keymap SVG/HTML renderer in `scripts/keymap_docs.py` still assumes the Corne's
-geometry and has **not** been ported.
+| Space + | Does |
+|---|---|
+| M , . / | Switch to Bluetooth profile 1, 2, 3, 4 |
+| Esc (right pinky, bottom) | Forget the pairing of the current profile |
+| N | Switch typing between USB and Bluetooth when both are connected |
 
-## Patched RMK (vendor/)
+Pairing is remembered across power-offs. **After a firmware update that changes the
+keymap file, all pairings are cleared** (see [Updating](#updating-the-firmware)); then
+forget "Parix 52" on the computer and pair again, otherwise the computer keeps trying
+the old pairing.
 
-`vendor/rmk` is upstream RMK at rev `b982049`, pristine except for the
-**per-profile whitelist-advertising patch** (see `vendor/rmk/YUYUDHAN_PATCH.md`):
+## The trackpad
 
-- a bonded profile advertises *filtered* — other computers can't steal the
-  connection slot and wedge the keyboard on the wrong LTK;
-- filtered advertising is gated on split-link health, so the right half can
-  always reconnect (stock accept-list contention starves the split link).
+The right half carries a 40 mm Cirque trackpad.
 
-Wired via `[patch."https://github.com/HaoboGu/rmk"]` in `Cargo.toml`.
+- **Pointer:** touch and move in the middle of the pad.
+- **Scroll:** touch the **outer ring** (the outer quarter of the pad's radius) and run
+  your finger around it, like a wheel. Clockwise scrolls down. Whether a touch is a
+  pointer move or a scroll is decided where your finger lands and stays that way until
+  you lift it.
+- **Clicking:** moving the pointer switches the keyboard to the MOUSE layer for about
+  two-thirds of a second after the last movement. While it is on, the right thumb keys
+  are the mouse buttons: **Enter = left click, Backspace = right click**, and the
+  right home row moves the pointer in steps, the row below it scrolls. The lights turn
+  cyan while this layer is on. You can also hold `` ` `` to reach the same layer.
+- Tapping the pad is not a click.
 
-## Displays
+The trackpad only works with the right half linked to the left; it needs no pairing of
+its own.
 
-- **Left (central):** ZMK-built-in-style status — output (USB/BT profile),
-  battery gauge, layer name. Event-driven — zero idle cost.
-- **Right (peripheral):** Parix screen — glitching P keycap logo (byte-exact
-  port of the ZMK `custom_status_screen.c`), split-link ✓/✗, battery.
+## Lights and screens
 
-If content is upside-down for your mount, flip `rotation = 0` → `180` in
-`config/keyboard.toml`.
+Every key has a light under it. The colour tells you what the key does on the layer
+you are on: letters warm white, digits green, modifiers yellow, editing keys pink,
+layer keys in the colour of the layer they open, dark when the key does nothing. Hold a
+layer key and only its live keys stay lit.
 
-## RGB
+- **Space + Y** turns all lights and the screen off and on (the DISPOFF layer).
+- The lights go off by themselves after ten minutes without a keypress and come back on
+  the next one.
 
-RMK has no native WS2812/SK6812 support yet, so `src/rgb.rs` drives the 26-LED chain per
-half (one under every key, no underglow, data on P0.08) from the nRF52840 PWM engine: a
-dim static color per active layer, off while sleeping, and TG(7) (DISPOFF) as the kill
-switch. The LEDs hang off VCC with no power mosfet, so they idle at roughly 0.5–1 mA each
-even when dark — about 13–26 mA per half. Real "off" is the power switch.
+The left half's screen shows the connection (USB or the Bluetooth profile number), the
+battery level and the layer in use. The right half has no screen; the trackpad sits
+where it would be.
 
-## Building
+## Battery
 
-Cloud: push to GitHub — CI uploads `parix52-rmk-central.uf2` /
-`parix52-rmk-peripheral.uf2`.
+Each half takes a 3.7 V lithium-polymer cell on a JST-PH plug, switched by the slide
+switch on the board. Charging is through the USB port of each half, at about 100 mA
+(roughly ten hours for a 1000 mAh cell); the charger works whether the switch is on or
+off. The left half reports its level to the computer; the screen shows it too.
 
-Local:
+The lights are most of the power budget: a half with its lights on draws around
+60–100 mA, and even dark the LED chips keep taking about 15 mA. Turn the lights off
+(Space + Y) when you want the battery to last, and use the slide switch when the
+keyboard is put away, which is the only true off.
+
+## Changing the keymap with Vial
+
+The keymap can be edited live, no reflashing, with [Vial](https://get.vial.today)
+(desktop app) or [vial.rocks](https://vial.rocks) in Chrome.
+
+1. Connect the **left half by USB**. If it is also connected over Bluetooth, Vial may
+   pick the Bluetooth entry and fail: disconnect it in the computer's Bluetooth menu
+   first, or choose the other "Parix 52" in Vial's device list.
+2. Open Vial. When it asks you to unlock, **hold both left thumb keys** (Space and Tab)
+   until it continues.
+3. Change keys, layers, combos; every change is saved on the keyboard at once.
+
+Vial keeps its changes in the keyboard's memory. A firmware update that changes the
+keymap file resets them (the update says so); plain firmware updates keep them.
+
+## Updating the firmware
+
+The latest firmware built from this repository is always at
+**[Releases → latest](https://github.com/dieselsaurav/parix52/releases/tag/latest)**:
+
+| File | Goes on |
+|---|---|
+| `parix52-rmk-central.uf2` | the **left** half |
+| `parix52-rmk-peripheral.uf2` | the **right** half |
+| `parix52-rmk-reset.uf2` | either half, only to wipe its memory (see below) |
+
+To flash a half:
+
+1. Connect it by USB.
+2. Press the reset button **twice quickly**. A drive called `NICENANO` appears on the
+   computer.
+3. Copy the `.uf2` file for that half onto the drive. The drive disappears and the half
+   restarts with the new firmware within a few seconds. (If the computer complains that
+   the copy failed at the very end, that is normal; the half had already restarted.)
+
+Update both halves from the same release; they must match. Changes that only touch the
+keymap need only the left half.
+
+**Memory wipe.** When the keymap file (`config/keyboard.toml`) changes between releases,
+the first start of the new firmware clears the keyboard's stored settings: Bluetooth
+pairings, Vial edits, the selected profile. Forget "Parix 52" on your computers and pair
+again. The release notes say when this applies.
+
+## If something goes wrong
+
+**The computer shows "Parix 52" but typing does nothing, or it keeps connecting and
+disconnecting.** The computer still holds an old pairing. Forget the device in the
+Bluetooth settings and pair again.
+
+**Keys from one half don't type.** The halves have lost each other. Switch both off at
+the slide switch, wait a few seconds, switch the left on first, then the right.
+
+**A half won't take a firmware file / the `NICENANO` drive never appears.** Try the
+double-tap on the reset button again (two presses within half a second); try another
+cable or USB port. The bootloader is independent of the firmware, so a failed flash never
+"bricks" the half: double-tap again and copy the file again.
+
+**Vial won't connect.** Use USB, not Bluetooth, and unlock with both left thumb keys
+(see [Vial](#changing-the-keymap-with-vial)).
+
+**Start over.** Flash `parix52-rmk-reset.uf2` on a half: it wipes that half's stored
+memory (pairings, Vial edits), blinks the module's blue LED slowly when done, and waits.
+Then flash the normal firmware for that half again.
+
+## Building from source
 
 ```sh
 rustup target add thumbv7em-none-eabihf
 cargo install cargo-make
-cargo make uf2          # outputs build/parix52-rmk-{central,peripheral}.uf2
+cargo make uf2            # build/parix52-rmk-{central,peripheral,reset}.uf2
+cargo make keymap         # docs/keymap.svg (needs: pip install keymap-drawer==0.23.0)
 ```
 
-## Settings reset (ZMK `settings_reset` equivalent)
+Rust 1.96.1 is pinned in `rust-toolchain.toml` (the vendored RMK does not build on newer
+compilers). GitHub Actions builds every push, attaches the three `.uf2` files to the
+run, refreshes the `latest` release on pushes to `main`, and redraws `docs/keymap.svg`
+and commits it back whenever the keymap changed.
 
-`parix52-rmk-reset.uf2` (built alongside the other two by `cargo make uf2`)
-is a single role-free binary, safe on **either half** — just like ZMK's
-`settings_reset` shield. It erases RMK's storage region (0xA0000–0xC0000:
-BLE host bonds, split-pairing state, Vial remaps, selected profile) and
-signals on the nice!nano's blue LED: slow blink = erased, fast blink =
-failed. Flash it, wait for the slow blink, then flash the normal firmware
-back. For host-pairing trouble alone, try **User6** on MEDIA first — it
-clears just the current profile's bond at runtime.
+Where things are:
 
-If you ever override `start_addr` / `num_sectors` under `[storage]`, update
-the constants in `src/reset.rs` to match.
+| Path | What |
+|---|---|
+| `config/keyboard.toml` | The keymap and the whole hardware description: pins, layers, combos, tap-hold timing, Bluetooth, trackpad, storage. Read at compile time. Changing it wipes the keyboard's stored settings at the next start. |
+| `config/vial.json` | The layout as Vial draws it; also the source of the key positions in `docs/keymap.svg` |
+| `src/central.rs`, `src/peripheral.rs` | The two binaries, one per half |
+| `src/rgb.rs`, `src/rgb_map.rs` | The LED driver (nRF PWM, SK6812 timing) and the per-key colours per layer |
+| `src/status.rs` | The left half's screen |
+| `src/reset.rs` | The memory-wipe image |
+| `vendor/rmk`, `vendor/nrf-mpsl` | RMK and Nordic's MPSL bindings, with this keyboard's changes; each `*PATCH*.md` there says what was changed and why |
+| `scripts/` | Flashing helpers for macOS, the keymap renderer, passive Mac-side monitors |
 
-## Flashing
+## Hardware reference
 
-1. Double-tap reset on the **left** half → drag `parix52-rmk-central.uf2` onto the `NICENANO` drive.
-2. Same on the **right** half with `parix52-rmk-peripheral.uf2`.
+Per half: nRF52840 Pro Micro-style module (nice!nano v2 or compatible), 26 Kailh Choc
+hotswap switches, 26 SK6812MINI-E LEDs, a JST-PH battery plug with slide switch, a
+display header (SSD1306 OLED on the left, the Cirque TM040040 trackpad on the right).
 
-Reflash the **central** for keymap changes; the peripheral only needs
-reflashing when firmware code changes.
+| Signal | Pro Micro pin | nRF52840 |
+|---|---|---|
+| Rows R0–R4 | 4, 5, 6, 7, 8 | P0.22, P0.24, P1.00, P0.11, P1.04 |
+| Columns C0–C5 (C0 = outer column on both halves) | 21, 20, 19, 18, 15, 14 | P0.31, P0.29, P0.02, P1.15, P1.13, P1.11 |
+| LED data | 0 | P0.08 |
+| Display header: SDA/MOSI, SCL/SCK, CS | 2, 3, 1 | P0.17, P0.20, P0.06 |
+| Trackpad MISO, data-ready (right half) | 9, 10 | P1.06, P0.09 |
 
-## ⚠️ Going back to ZMK
+Matrix 5 rows × 12 columns, COL2ROW; row 4 is the thumb row (two keys a side).
+Left half = central, right half = peripheral; the halves find each other by fixed
+Bluetooth addresses set in `keyboard.toml`.
 
-RMK ≥ 0.7 replaces the Nordic SoftDevice BLE stack. **To return to ZMK you
-must first re-flash the
-[nice!nano bootloader](https://nicekeyboards.com/docs/nice-nano/troubleshooting#my-nicenano-seems-to-be-acting-up-and-i-want-to-re-flash-the-bootloader)**,
-then flash ZMK as usual.
+**Going back to ZMK or another firmware:** RMK uses Nordic's newer Bluetooth controller
+instead of the SoftDevice, so before flashing a SoftDevice-based firmware (ZMK) you must
+first re-flash the
+[nice!nano bootloader](https://nicekeyboards.com/docs/nice-nano/troubleshooting#my-nicenano-seems-to-be-acting-up-and-i-want-to-re-flash-the-bootloader).
 
-## Not ported (RMK gaps)
+## Licence
 
-- **RGB underglow keycodes** (`rgb_ug` TOG/EFF/HUI/SAI) — replaced by the
-  layer-color driver above; TG(7) doubles as the RGB toggle.
-- **nice!view** — unsupported; this port drives the SSD1306 OLEDs. With
-  nice!views fitted the keyboard works but screens stay blank.
-- **`ext_power` toggle, ZMK-style deep sleep, ZMK Studio** — not in RMK
-  (Vial replaces Studio for live keymap editing).
+This firmware is MIT OR Apache-2.0, like RMK. Vendored code keeps its own licences
+(see `vendor/*/LICENSE-*`).

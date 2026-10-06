@@ -121,3 +121,9 @@ dependencies = ["objcopy-reset"]
 
 [tasks.uf2]
 dependencies = ["uf2-central", "uf2-peripheral", "uf2-reset"]
+
+# docs/keymap.svg from config/keyboard.toml + config/vial.json. CI runs this
+# after every push and commits the result, so the picture never lags the keymap.
+[tasks.keymap]
+command = "python3"
+args = ["scripts/keymap_docs.py", "--out", "docs/keymap.svg"]
