@@ -14,11 +14,11 @@ where
     SIZE: DisplaySizeAsync,
     Self: DrawTarget<Color = BinaryColor> + DisplayConfigAsync,
 {
-    async fn init(&mut self) -> bool {
-        DisplayConfigAsync::init(self).await.is_ok()
+    async fn init(&mut self) {
+        DisplayConfigAsync::init(self).await.ok();
     }
 
-    async fn flush(&mut self) -> bool {
-        ssd1306::Ssd1306Async::flush(self).await.is_ok()
+    async fn flush(&mut self) {
+        ssd1306::Ssd1306Async::flush(self).await.ok();
     }
 }

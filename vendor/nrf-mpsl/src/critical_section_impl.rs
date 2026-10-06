@@ -7,7 +7,7 @@ use embassy_nrf::interrupt::Interrupt;
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "nrf54l-s", feature = "nrf54l-ns"))] {
-        const CS_LEN: usize = 9;
+        const CS_LEN: usize = 10;
         const RESERVED_IRQS: [u32; CS_LEN] = {
             let mut irqs = [0; CS_LEN];
             irqs[Interrupt::RADIO_0 as usize / 32] = 1  << (Interrupt::RADIO_0 as usize % 32);
@@ -73,6 +73,12 @@ unsafe impl critical_section::Impl for CriticalSection {
                 for i in 0..RESERVED_IRQS.len() {
                     nvic.icer[i].write(!RESERVED_IRQS[i]);
                 }
+
+                // Per Arm DAI0321A section 4.6:
+                // > if it is necessary to ensure an interrupt will not be triggered after disabling it in the NVIC,
+                // > add a DSB instruction and then an ISB instruction
+                cortex_m::asm::dsb();
+                cortex_m::asm::isb();
             });
         }
 

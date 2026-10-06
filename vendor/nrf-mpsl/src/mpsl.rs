@@ -283,14 +283,14 @@ unsafe extern "C" fn assert_handler(file: *const core::ffi::c_char, line: u32) {
 
 #[cfg(feature = "_nrf54l")]
 #[no_mangle]
-unsafe extern "C" fn mpsl_constlat_request_callback() {
+unsafe extern "C" fn mpsl_low_latency_acquire_callback() {
     let p = embassy_nrf::pac::POWER;
     p.tasks_constlat().write_value(1);
 }
 
 #[cfg(feature = "_nrf54l")]
 #[no_mangle]
-unsafe extern "C" fn mpsl_lowpower_request_callback() {
+unsafe extern "C" fn mpsl_low_latency_release_callback() {
     let p = embassy_nrf::pac::POWER;
     p.tasks_lowpwr().write_value(1);
 }
@@ -323,7 +323,7 @@ impl<'d> MultiprotocolServiceLayer<'d> {
             use embassy_nrf::pac;
 
             let freq = pac::OSCILLATORS.pll().currentfreq().read().currentfreq();
-            assert!(freq == pac::oscillators::vals::Currentfreq::CK128M);
+            assert!(freq == pac::oscillators::vals::Currentfreq::Ck128m);
 
             let r = pac::GRTC;
             // Start syscounter if not started

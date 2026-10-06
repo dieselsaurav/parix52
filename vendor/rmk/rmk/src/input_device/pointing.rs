@@ -6,11 +6,14 @@ use embedded_hal_async::digital::Wait;
 use futures::future::pending;
 use rmk_macro::{input_device, processor};
 use rmk_types::keycode::HidKeyCode;
-use usbd_hid::descriptor::MouseReport;
 
+#[cfg(feature = "_ble")]
+use crate::ble::sleep::report_activity;
 use crate::channel::{send_hid_report, try_send_hid_report};
-use crate::event::{Axis, AxisEvent, AxisValType, PointingEvent, PointingProcessorEvent, PointingSetCpiEvent};
-use crate::hid::{KeyboardReport, Report};
+use crate::event::{
+    Axis, AxisEvent, AxisValType, PointingEvent, PointingProcessorEvent, PointingSetCpiEvent, SleepStateEvent,
+};
+use crate::hid::{KeyboardReport, MouseReport, Report};
 use crate::keymap::KeyMap;
 
 pub const ALL_POINTING_DEVICES: u8 = 255;
@@ -58,6 +61,12 @@ pub trait PointingDriver {
         debug!("set_resolution() is not implemented for this sensor.");
         Err(PointingDriverError::NotImplementedError)
     }
+    /// Set low-power mode.
+    /// A pointing driver which has low-power mode should re-implement this function.
+    /// This function is called when the keyboard goes idle(sleep).
+    async fn set_low_power(&mut self, _enabled: bool) -> Result<(), PointingDriverError> {
+        Ok(())
+    }
 }
 
 /// Initialization state for the device
@@ -72,7 +81,7 @@ pub enum InitState {
 /// PointingDevice an InputDevice for RMK
 ///
 /// This device publishes `PointingEvent` events with relative X/Y movement.
-#[processor(subscribe = [PointingSetCpiEvent])]
+#[processor(subscribe = [PointingSetCpiEvent, SleepStateEvent])]
 #[input_device(publish = PointingEvent)]
 pub struct PointingDevice<S: PointingDriver> {
     pub sensor: S,
@@ -131,10 +140,6 @@ impl<S: PointingDriver> PointingDevice<S> {
     }
 
     async fn poll_once(&mut self) {
-        if self.init_state != InitState::Ready && !self.try_init().await {
-            return;
-        }
-
         if !self.sensor.motion_pending() {
             return;
         }
@@ -197,6 +202,17 @@ impl<S: PointingDriver> PointingDevice<S> {
         }
     }
 
+    async fn on_sleep_state_event(&mut self, e: SleepStateEvent) {
+        // Before init the sensor has no registers to update; init applies the
+        // awake state itself.
+        if self.init_state != InitState::Ready {
+            return;
+        }
+        if let Err(err) = self.sensor.set_low_power(e.0).await {
+            debug!("PointingDevice {}: low power switch failed: {:?}", self.id, err);
+        }
+    }
+
     // Read accumulated pointing event
     //
     // +--------------- loop ---------------+
@@ -210,6 +226,12 @@ impl<S: PointingDriver> PointingDevice<S> {
     // +------------------------------------+
     async fn read_pointing_event(&mut self) -> PointingEvent {
         use embassy_futures::select::{Either, select};
+
+        while self.init_state != InitState::Ready {
+            if !self.try_init().await && self.init_state == InitState::Failed {
+                pending::<()>().await;
+            }
+        }
 
         if self.last_poll == Instant::MIN {
             self.last_poll = Instant::now();
@@ -576,6 +598,11 @@ impl<'a> PointingProcessor<'a> {
             return;
         }
 
+        // Report activity for sleep management, as the keyboard does for key
+        // events: on a pointing device, moving the ball is the activity.
+        #[cfg(feature = "_ble")]
+        report_activity();
+
         let mut x = 0i16;
         let mut y = 0i16;
         let mut z = 0i16;
@@ -600,7 +627,7 @@ impl<'a> PointingProcessor<'a> {
                 buttons: 0,
                 x: 0,
                 y: 0,
-                wheel: z.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
+                wheel: z,
                 pan: 0,
             }));
         }
@@ -634,8 +661,8 @@ impl<'a> PointingProcessor<'a> {
                         let out_y = if cursor_config.invert_y { -out_y } else { out_y };
                         MouseReport {
                             buttons,
-                            x: out_x.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
-                            y: out_y.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
+                            x: out_x,
+                            y: out_y,
                             wheel: 0,
                             pan: 0,
                         }
@@ -659,8 +686,8 @@ impl<'a> PointingProcessor<'a> {
                             buttons,
                             x: 0,
                             y: 0,
-                            wheel: wheel.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
-                            pan: pan.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
+                            wheel,
+                            pan,
                         }
                     }
                     PointingMode::Sniper(sniper_config) => {
@@ -677,8 +704,8 @@ impl<'a> PointingProcessor<'a> {
                         let out_y = if sniper_config.invert_y { -sy } else { sy };
                         MouseReport {
                             buttons,
-                            x: out_x.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
-                            y: out_y.clamp(i8::MIN as i16, i8::MAX as i16) as i8,
+                            x: out_x,
+                            y: out_y,
                             wheel: 0,
                             pan: 0,
                         }
@@ -688,9 +715,8 @@ impl<'a> PointingProcessor<'a> {
 
                 // Drop, never queue: the mouse shares the report queue with the
                 // keyboard, and a pointer streaming at 100 Hz into a slow link
-                // held every key release behind it until the OS auto-repeated
-                // (2026-10-01). A lost mouse delta is invisible; a late key
-                // release is not.
+                // held every key release behind it until the OS auto-repeated.
+                // A lost mouse delta is invisible; a late key release is not.
                 try_send_hid_report(Report::MouseReport(mouse_report));
             }
             PointingMode::Caret(caret_config) => {
@@ -825,15 +851,6 @@ mod tests {
     use super::*;
     use crate::input_device::InputDevice;
     use crate::test_support::test_block_on as block_on;
-
-    // Init logger for tests
-    #[ctor::ctor(unsafe)]
-    fn init_log() {
-        let _ = env_logger::builder()
-            .filter_level(log::LevelFilter::Debug)
-            .is_test(true)
-            .try_init();
-    }
 
     struct DummyDriver {
         pub motion_pending: bool,

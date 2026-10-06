@@ -7,30 +7,30 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-rmk = { git = "https://github.com/HaoboGu/rmk", rev = "b98204928e9a8532064ce99add1f6c4c554e08c9", features = [
+rmk = { path = "vendor/rmk/rmk", features = [
     "nrf52840_ble",
     "split",
     "async_matrix",
     "adafruit_bl",
     "ssd1306",
 ] }
-nrf-sdc = { git = "https://github.com/haobogu/nrf-sdc", rev = "ffe59a7aefaaa145a3d2474602f33387f80dcefa", features = [
+nrf-sdc = { version = "0.4.0", features = [
     "defmt",
     "peripheral",
     "central",
     "nrf52840",
 ] }
-nrf-mpsl = { git = "https://github.com/haobogu/nrf-sdc", rev = "ffe59a7aefaaa145a3d2474602f33387f80dcefa", features = [
+nrf-mpsl = { version = "0.4.0", features = [
     "defmt",
     "critical-section-impl",
     "nrf52840",
 ] }
-bt-hci = { version = "0.8", features = ["defmt"] }
+bt-hci = { version = "0.10", features = ["defmt"] }
 
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 embassy-time = { version = "0.5", features = ["tick-hz-32_768", "defmt", "defmt-timestamp-uptime"] }
-embassy-nrf = { version = "0.10", features = [
+embassy-nrf = { version = "0.11", features = [
     "defmt",
     "nrf52840",
     "time-driver-rtc1",
@@ -51,9 +51,6 @@ static_cell = "2"
 embedded-graphics = "0.8"
 embedded-storage = "0.3"
 
-rand = { version = "0.8.4", default-features = false }
-rand_core = { version = "0.6" }
-rand_chacha = { version = "0.3", default-features = false }
 u8g2-fonts = "0.8.0"
 
 [build-dependencies]
@@ -90,16 +87,12 @@ opt-level = "z"         # optimize for binary size
 overflow-checks = false
 lto = "fat"
 
-# Local vendored RMK (rev b98204928e9a8532064ce99add1f6c4c554e08c9, pristine) carrying the
-# per-profile whitelist-advertising patch. See vendor/rmk/YUYUDHAN_PATCH.md.
-# Patching `rmk` alone cascades: its ../rmk-macro, ../rmk-types, ../rmk-config
-# path-deps resolve inside the vendored tree.
-[patch."https://github.com/HaoboGu/rmk"]
-rmk = { path = "vendor/rmk/rmk" }
+# RMK is vendored at the revision in vendor/rmk/UPSTREAM_REV, with this
+# keyboard's patches; vendor/rmk/PATCH.md lists them. rmk-macro, rmk-types
+# and rmk-config are path-deps inside that tree.
 
-# Vendored nrf-mpsl (rev ffe59a7) with the flash timeslot driver reshaped so
-# a flash write fits between radio events and never panics in the timeslot
-# callback. See vendor/nrf-mpsl/FLASH_PATCH.md. The -sys crate with the
-# Nordic binaries stays a git dependency.
-[patch."https://github.com/haobogu/nrf-sdc"]
+# nrf-mpsl 0.4.0 from crates.io with the flash timeslot driver reshaped so a
+# flash write fits between radio events and never panics in the timeslot
+# callback. See vendor/nrf-mpsl/FLASH_PATCH.md.
+[patch.crates-io]
 nrf-mpsl = { path = "vendor/nrf-mpsl" }

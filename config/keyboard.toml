@@ -49,9 +49,8 @@ split_central_sleep_timeout_seconds = 600
 # On-chip flash storage (Vial live-remaps, BLE bonds, selected profile
 # survive power-off).
 #
-# start_addr is NOT left at RMK's nRF default of 0x60000: the central image
-# is ~480 KB and runs past that address, so the default put the storage
-# inside the program and its first-boot erase wiped 8 KB of code.
+# RMK's nRF default is 0xA0000 with 32 sectors; this image is ~490 KB and
+# the layout below keeps the store just under the bootloader instead.
 #
 # num_sectors is NOT left at RMK's default of 2 either. RMK writes EVERY key
 # of every layer into the store on first boot -- 5 x 12 x 8 = 480 entries at
@@ -96,8 +95,7 @@ unlock_keys = [[4, 5], [4, 4]]
 [layout]
 rows = 5
 cols = 12
-layers = 8
-matrix_map = """
+map = """
 (0,0,L) (0,1,L) (0,2,L) (0,3,L) (0,4,L) (0,5,L)   (0,6,R) (0,7,R) (0,8,R) (0,9,R) (0,10,R) (0,11,R)
 (1,0,L) (1,1,L) (1,2,L) (1,3,L) (1,4,L) (1,5,L)   (1,6,R) (1,7,R) (1,8,R) (1,9,R) (1,10,R) (1,11,R)
 (2,0,L) (2,1,L) (2,2,L) (2,3,L) (2,4,L) (2,5,L)   (2,6,R) (2,7,R) (2,8,R) (2,9,R) (2,10,R) (2,11,R)
@@ -114,7 +112,10 @@ matrix_map = """
 # Layer 0 — BASE. QWERTY, GACS home-row mods (tap = letter, hold = mod, tuned
 # by the HRM profile), Hyper on right pinky (ZMK &hyper macro). Thumbs, left
 # to right: Space=MEDIA Tab=NAV | Enter=SYM Backspace=NUM.
-[[layer]]
+[keymap]
+layers = 8
+
+[[keymap.layer]]
 name = "BASE"
 keys = """
 LT(6, Grave, TL)       Kc1              Kc2              Kc3               Kc4                Kc5                  Kc6                  Kc7                Kc8               Kc9              Kc0                  LT(5, Minus, TL)
@@ -126,7 +127,7 @@ LShift                 Z                X                C                 V    
 
 # Layer 1 — NAV (hold TAB). Vim arrows right home row, clipboard chords
 # top right (macOS: Cmd-based), pre-held GACS mods left home row.
-[[layer]]
+[[keymap.layer]]
 name = "NAV"
 keys = """
 No No   No   No    No     No    No                   No          No          No          No          No
@@ -138,7 +139,7 @@ No No   No   No    No     No    Insert               Home        PageDown    Pag
 
 # Layer 2 — NUM (hold BACKSPACE). Columnar numpad on the left hand, mirror
 # mods on the right home row.
-[[layer]]
+[[keymap.layer]]
 name = "NUM"
 keys = """
 No No          No  No  No  No              No No     No    No   No   No
@@ -157,7 +158,7 @@ No Grave       Kc1 Kc2 Kc3 Backslash       No No     No    No   No   No
 #   button instead -- a PIN reset does clear the watchdog.
 # (ZMK rgb_ug / ext_power keys not ported — no RMK support yet; TG(7) is the
 # RGB kill switch instead.)
-[[layer]]
+[[keymap.layer]]
 name = "MEDIA"
 keys = """
 No No   No   No    No     No    No             No             No           No         No             No
@@ -169,7 +170,7 @@ No No   No   No    No     No    User7          User0          User1        User2
 
 # Layer 4 — SYM (hold ENTER). NUM layer with shift applied: same positions,
 # shifted symbols ({ & * ( } etc.). Thumbs: ( ) _ (ZMK LPAR RPAR UNDER).
-[[layer]]
+[[keymap.layer]]
 name = "SYM"
 keys = """
 No No                   No           No           No           No                       No No     No    No   No   No
@@ -180,7 +181,7 @@ No SHIFTED(Grave)       SHIFTED(Kc1) SHIFTED(Kc2) SHIFTED(Kc3) SHIFTED(Backslash
 """
 
 # Layer 5 — FUN (hold DELETE). F-keys columnar like NUM.
-[[layer]]
+[[keymap.layer]]
 name = "FUN"
 keys = """
 F1 F2  F3 F4 F5    F6             F7 F8     F9    F10  F11  F12
@@ -192,7 +193,7 @@ No F10 F1 F2 F3    Pause          No No     No    No   No   No
 
 # Layer 6 — MOUSE (hold TAB). Pointer on the right home row, scroll below,
 # buttons on the thumbs. ZMK MCLK/LCLK/RCLK = RMK Btn3/Btn1/Btn2.
-[[layer]]
+[[keymap.layer]]
 name = "MOUSE"
 keys = """
 No No   No   No    No     No    No             No             No           No              No No
@@ -204,7 +205,7 @@ No No   No   No    No     No    MouseWheelLeft MouseWheelDown MouseWheelUp Mouse
 
 # Layer 7 — DISPOFF (toggled by TG(7) on MEDIA). Fully transparent; only
 # signals the OLED renderers and the RGB processor (layer == 7) to go dark.
-[[layer]]
+[[keymap.layer]]
 name = "DISPOFF"
 keys = """
 _______ _______ _______ _______ _______ _______    _______ _______ _______ _______ _______ _______

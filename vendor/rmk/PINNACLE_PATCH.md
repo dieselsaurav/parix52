@@ -27,4 +27,4 @@ TOML:
     instance = "TWISPI0"
     sck = "P0_20"; mosi = "P0_17"; miso = "P1_06"; cs = "P0_06"
 
-Not yet tested on hardware (2026-09-30).
+Working on hardware since 2026-10-01 (DR pin, absolute mode with scroll ring, auto mouse layer); re-ported onto upstream 775a767 on 2026-10-06.

@@ -13,7 +13,7 @@ use crate::host::via::keycode_convert::{from_via_keycode, to_via_keycode};
 pub(crate) async fn process_vial<'a>(
     report: &mut ViaReport,
     vial_config: &VialConfig<'a>,
-    #[cfg(feature = "vial_lock")] locker: &mut super::vial_lock::VialLock<'_>,
+    #[cfg(feature = "host_lock")] locker: &crate::host::lock::HostLock<'_>,
     ctx: &KeyboardContext<'_>,
 ) {
     // report.output_data[0] == 0xFE -> vial commands
@@ -51,7 +51,7 @@ pub(crate) async fn process_vial<'a>(
         VialCommand::GetUnlockStatus => {
             // Reset all data to 0xFF(it's required!)
             report.input_data.fill(0xFF);
-            #[cfg(feature = "vial_lock")]
+            #[cfg(feature = "host_lock")]
             {
                 // Unlocked
                 report.input_data[0] = locker.is_unlocked() as u8;
@@ -63,7 +63,7 @@ pub(crate) async fn process_vial<'a>(
                     report.input_data[3 + idx * 2] = *col;
                 }
             }
-            #[cfg(not(feature = "vial_lock"))]
+            #[cfg(not(feature = "host_lock"))]
             {
                 // Unlocked
                 report.input_data[0] = 1;
@@ -73,26 +73,26 @@ pub(crate) async fn process_vial<'a>(
             }
         }
         VialCommand::UnlockStart => {
-            #[cfg(feature = "vial_lock")]
+            #[cfg(feature = "host_lock")]
             locker.unlocking();
-            #[cfg(not(feature = "vial_lock"))]
+            #[cfg(not(feature = "host_lock"))]
             error!("Vial lock feature is not enabled");
         }
         VialCommand::UnlockPoll => {
-            #[cfg(feature = "vial_lock")]
+            #[cfg(feature = "host_lock")]
             {
                 locker.unlocking();
                 report.input_data[0] = locker.is_unlocked() as u8;
                 report.input_data[1] = locker.is_unlocking() as u8;
                 report.input_data[2] = locker.check_unlock();
             }
-            #[cfg(not(feature = "vial_lock"))]
+            #[cfg(not(feature = "host_lock"))]
             error!("Vial lock feature is not enabled");
         }
         VialCommand::Lock => {
-            #[cfg(feature = "vial_lock")]
+            #[cfg(feature = "host_lock")]
             locker.lock();
-            #[cfg(not(feature = "vial_lock"))]
+            #[cfg(not(feature = "host_lock"))]
             error!("Vial lock feature is not enabled");
         }
         VialCommand::BehaviorSettingQuery => {
@@ -106,8 +106,9 @@ pub(crate) async fn process_vial<'a>(
                 LittleEndian::write_u16(&mut report.input_data[8..10], 0x13);
                 LittleEndian::write_u16(&mut report.input_data[10..12], 0x16);
                 LittleEndian::write_u16(&mut report.input_data[12..14], 0x17);
-                LittleEndian::write_u16(&mut report.input_data[14..16], 0x1A);
-                LittleEndian::write_u16(&mut report.input_data[16..18], 0x1B);
+                LittleEndian::write_u16(&mut report.input_data[14..16], 0x19);
+                LittleEndian::write_u16(&mut report.input_data[16..18], 0x1A);
+                LittleEndian::write_u16(&mut report.input_data[18..20], 0x1B);
             }
         }
         VialCommand::GetBehaviorSetting => {
@@ -133,8 +134,8 @@ pub(crate) async fn process_vial<'a>(
                     LittleEndian::write_u16(&mut report.input_data[1..3], tap_interval);
                 }
                 SettingKey::TapCapslockInterval => {
-                    let tap_interval = ctx.tap_interval();
-                    LittleEndian::write_u16(&mut report.input_data[1..3], tap_interval);
+                    let tap_capslock_interval = ctx.tap_capslock_interval();
+                    LittleEndian::write_u16(&mut report.input_data[1..3], tap_capslock_interval);
                 }
                 SettingKey::PermissiveHold => {
                     if let Some(m) = ctx.morse_default_profile().mode()
@@ -153,6 +154,10 @@ pub(crate) async fn process_vial<'a>(
                     } else {
                         report.input_data[1] = 0
                     }
+                }
+                SettingKey::QuickTapTerm => {
+                    let quick_tap_term = ctx.morse_default_profile().quick_tap_timeout_ms().unwrap_or(0);
+                    LittleEndian::write_u16(&mut report.input_data[1..3], quick_tap_term);
                 }
                 SettingKey::UnilateralTap => {
                     let unilateral_tap = ctx.morse_default_profile().unilateral_tap().unwrap_or(false);
@@ -174,24 +179,24 @@ pub(crate) async fn process_vial<'a>(
                 SettingKey::None => (),
                 SettingKey::ComboTimeout => {
                     let combo_timeout = u16::from_le_bytes([report.output_data[4], report.output_data[5]]);
-                    ctx.set_combo_timeout(combo_timeout).await;
+                    let _ = ctx.set_combo_timeout(combo_timeout).await;
                 }
                 SettingKey::MorseTimeout => {
                     let timeout_time = u16::from_le_bytes([report.output_data[4], report.output_data[5]]);
                     let new_profile = ctx.morse_default_profile().with_hold_timeout_ms(Some(timeout_time));
-                    ctx.set_morse_default_profile(new_profile).await;
+                    let _ = ctx.set_morse_default_profile(new_profile).await;
                 }
                 SettingKey::OneShotTimeout => {
                     let timeout_time = u16::from_le_bytes([report.output_data[4], report.output_data[5]]);
-                    ctx.set_one_shot_timeout(timeout_time).await;
+                    let _ = ctx.set_one_shot_timeout(timeout_time).await;
                 }
                 SettingKey::TapInterval => {
                     let tap_interval = u16::from_le_bytes([report.output_data[4], report.output_data[5]]);
-                    ctx.set_tap_interval(tap_interval).await;
+                    let _ = ctx.set_tap_interval(tap_interval).await;
                 }
                 SettingKey::TapCapslockInterval => {
                     let tap_capslock_interval = u16::from_le_bytes([report.output_data[4], report.output_data[5]]);
-                    ctx.set_tap_capslock_interval(tap_capslock_interval).await;
+                    let _ = ctx.set_tap_capslock_interval(tap_capslock_interval).await;
                 }
 
                 SettingKey::PermissiveHold => {
@@ -213,7 +218,7 @@ pub(crate) async fn process_vial<'a>(
                             old.mode() // Keep current mode unchanged
                         }
                     };
-                    ctx.set_morse_default_profile(old.with_mode(new_mode)).await;
+                    let _ = ctx.set_morse_default_profile(old.with_mode(new_mode)).await;
                 }
                 SettingKey::HoldOnOtherKeyPress => {
                     let enabled = report.output_data[4] == 1;
@@ -229,17 +234,24 @@ pub(crate) async fn process_vial<'a>(
                             old.mode() // Keep current mode unchanged
                         }
                     };
-                    ctx.set_morse_default_profile(old.with_mode(new_mode)).await;
+                    let _ = ctx.set_morse_default_profile(old.with_mode(new_mode)).await;
+                }
+                SettingKey::QuickTapTerm => {
+                    let timeout_time = u16::from_le_bytes([report.output_data[4], report.output_data[5]]);
+                    let new_profile = ctx
+                        .morse_default_profile()
+                        .with_quick_tap_timeout_ms(Some(timeout_time));
+                    let _ = ctx.set_morse_default_profile(new_profile).await;
                 }
                 SettingKey::UnilateralTap => {
                     let new_profile = ctx
                         .morse_default_profile()
                         .with_unilateral_tap(Some(report.output_data[4] == 1));
-                    ctx.set_morse_default_profile(new_profile).await;
+                    let _ = ctx.set_morse_default_profile(new_profile).await;
                 }
                 SettingKey::PriorIdleTime => {
                     let prior_idle_time = u16::from_le_bytes([report.output_data[4], report.output_data[5]]);
-                    ctx.set_morse_prior_idle_time(prior_idle_time).await;
+                    let _ = ctx.set_morse_prior_idle_time(prior_idle_time).await;
                 }
             }
         }
@@ -297,15 +309,16 @@ pub(crate) async fn process_vial<'a>(
                         let hold_after_tap = from_via_keycode(LittleEndian::read_u16(&report.output_data[10..12]));
                         let timeout_ms = LittleEndian::read_u16(&report.output_data[12..14]);
 
-                        ctx.update_morse(morse_idx, |morse: &mut Morse| {
-                            let _ = morse.put(TAP, tap.to_action());
-                            let _ = morse.put(DOUBLE_TAP, double_tap.to_action());
-                            let _ = morse.put(HOLD, hold.to_action());
-                            let _ = morse.put(HOLD_AFTER_TAP, hold_after_tap.to_action());
-                            morse.profile.set_hold_timeout_ms(timeout_ms);
-                            morse.profile.set_gap_timeout_ms(timeout_ms);
-                        })
-                        .await;
+                        let _ = ctx
+                            .update_morse(morse_idx, |morse: &mut Morse| {
+                                let _ = morse.put(TAP, tap.to_action());
+                                let _ = morse.put(DOUBLE_TAP, double_tap.to_action());
+                                let _ = morse.put(HOLD, hold.to_action());
+                                let _ = morse.put(HOLD_AFTER_TAP, hold_after_tap.to_action());
+                                morse.profile.set_hold_timeout_ms(timeout_ms);
+                                morse.profile.set_gap_timeout_ms(timeout_ms);
+                            })
+                            .await;
                     }
                 }
                 VialDynamic::DynamicVialComboGet => {
@@ -362,7 +375,7 @@ pub(crate) async fn process_vial<'a>(
                         output,
                         layer: None,
                     };
-                    ctx.set_combo(combo_idx, config).await;
+                    let _ = ctx.set_combo(combo_idx, config).await;
                 }
                 VialDynamic::DynamicVialKeyOverrideGet => {
                     warn!("DynamicEntryOp - DynamicVialKeyOverrideGet -- to be implemented");
@@ -405,13 +418,8 @@ pub(crate) async fn process_vial<'a>(
             );
             let keycode = BigEndian::read_u16(&report.output_data[5..7]);
             let action = from_via_keycode(keycode);
-            if clockwise == 1 {
-                info!("Setting clockwise action: {:?}", action);
-                ctx.set_encoder_clockwise(layer, index, action).await;
-            } else {
-                info!("Setting counter-clockwise action: {:?}", action);
-                ctx.set_encoder_counter_clockwise(layer, index, action).await;
-            }
+            info!("Setting encoder action (clockwise: {}): {:?}", clockwise, action);
+            let _ = ctx.set_encoder_direction(layer, index, clockwise == 1, action).await;
         }
         _ => (),
     }
@@ -427,7 +435,7 @@ mod tests {
 
     use super::*;
     use crate::COMBO_MAX_LENGTH;
-    use crate::storage::StorageData;
+    use crate::storage::StorageValue;
     #[test]
     fn test_combo_serialization_deserialization() {
         let mut actions = heapless::Vec::<KeyAction, COMBO_MAX_LENGTH>::new();
@@ -440,13 +448,13 @@ mod tests {
             layer: None,
         };
         let mut buffer = [0u8; 64];
-        let storage_data = StorageData::Combo(combo_config.clone());
+        let storage_data = StorageValue::Combo(combo_config.clone());
         let serialized_size = Value::serialize_into(&storage_data, &mut buffer).unwrap();
         // Deserialization
-        let deserialized_data = StorageData::deserialize_from(&buffer[..serialized_size]).unwrap();
+        let deserialized_data = StorageValue::deserialize_from(&buffer[..serialized_size]).unwrap();
         // Validation
         match deserialized_data {
-            (StorageData::Combo(deserialized_config), _) => {
+            (StorageValue::Combo(deserialized_config), _) => {
                 assert_eq!(deserialized_config, combo_config);
             }
             _ => panic!("Expected Combo"),

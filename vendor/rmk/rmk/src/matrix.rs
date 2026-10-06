@@ -1,11 +1,8 @@
-#[cfg(feature = "async_matrix")]
-use core::pin::pin;
-
 use embassy_time::Timer;
 use embedded_hal::digital::{InputPin, OutputPin};
 use rmk_macro::input_device;
 #[cfg(feature = "async_matrix")]
-use {embassy_futures::select::select_slice, embedded_hal_async::digital::Wait, heapless::Vec};
+use {embassy_futures::select::select_array, embedded_hal_async::digital::Wait};
 
 use crate::core_traits::Runnable;
 use crate::debounce::{DebounceState, DebouncerTrait};
@@ -16,7 +13,7 @@ pub mod direct_pin;
 pub mod hc595_matrix;
 
 /// Recording the matrix pressed state
-#[cfg(feature = "host_security")]
+#[cfg(feature = "host_lock")]
 pub struct MatrixState {
     // 30 bytes is the limit by Vial and 240 keys is enough for most keyboards
     state: [u8; 30],
@@ -25,7 +22,7 @@ pub struct MatrixState {
     row_len: usize,
 }
 
-#[cfg(feature = "host_security")]
+#[cfg(feature = "host_lock")]
 impl MatrixState {
     pub fn new(row: usize, col: usize) -> Self {
         let row_len = col.div_ceil(8);
@@ -51,18 +48,11 @@ impl MatrixState {
             self.state[byte_index] = self.state[byte_index] & !(1 << bit_index) | ((pressed as u8) << bit_index);
         }
     }
+    /// Copy the bitmap out in natural row-major order (bit 0 = col 0,
+    /// low byte first within a row) — the Rynk `MatrixState` wire order.
     pub fn read_all(&self, target: &mut [u8]) {
-        let slice = &self.state[..(self.row * self.row_len)];
-        let mut target_iter = target.iter_mut();
-        for row_bytes in slice.chunks(self.row_len) {
-            for byte in row_bytes.iter().rev() {
-                if let Some(target_byte) = target_iter.next() {
-                    *target_byte = *byte;
-                } else {
-                    break;
-                }
-            }
-        }
+        let n = (self.row * self.row_len).min(target.len());
+        target[..n].copy_from_slice(&self.state[..n]);
     }
     pub fn read(&self, row: u8, col: u8) -> bool {
         if row as usize >= self.row || col as usize >= self.col {
@@ -284,12 +274,8 @@ impl<
 
     #[cfg(feature = "async_matrix")]
     async fn wait_input_pins(&mut self) {
-        let mut futs: Vec<_, ROW> = self
-            .get_input_pins_mut()
-            .iter_mut()
-            .map(|input_pin| input_pin.wait_for_high())
-            .collect();
-        let _ = select_slice(pin!(futs.as_mut_slice())).await;
+        let futs = self.row_pins.each_mut().map(|input_pin| input_pin.wait_for_high());
+        let _ = select_array(futs).await;
     }
 }
 
@@ -314,12 +300,8 @@ impl<
 
     #[cfg(feature = "async_matrix")]
     async fn wait_input_pins(&mut self) {
-        let mut futs: Vec<_, COL> = self
-            .get_input_pins_mut()
-            .iter_mut()
-            .map(|input_pin| input_pin.wait_for_high())
-            .collect();
-        let _ = select_slice(pin!(futs.as_mut_slice())).await;
+        let futs = self.col_pins.each_mut().map(|input_pin| input_pin.wait_for_high());
+        let _ = select_array(futs).await;
     }
 }
 

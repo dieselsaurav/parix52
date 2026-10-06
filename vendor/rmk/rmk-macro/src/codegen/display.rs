@@ -93,12 +93,9 @@ fn expand_i2c_init(chip_series: &ChipSeries, i2c: &I2cConfig) -> TokenStream {
             quote! {
                 static DISPLAY_I2C_BUF: ::static_cell::StaticCell<[u8; 256]> = ::static_cell::StaticCell::new();
                 let display_i2c_buf = DISPLAY_I2C_BUF.init([0u8; 256]);
-                // Internal pull-ups on SDA/SCL. Without them a board with no
-                // display module fitted (the module normally carries the
-                // pull-ups) leaves both lines floating, TWIM never sees SCL
-                // go high and never raises STOPPED or ERROR, so the very
-                // first init() awaits forever. With the pull-ups an absent
-                // panel simply NACKs its address and init() returns an error.
+                // PARIX PATCH: internal pull-ups, so a board with no display
+                // module fitted (the module carries the pull-ups) has an idle
+                // bus that NACKs instead of floating lines.
                 let mut display_i2c_config = ::embassy_nrf::twim::Config::default();
                 display_i2c_config.sda_pullup = true;
                 display_i2c_config.scl_pullup = true;
@@ -116,12 +113,16 @@ fn expand_i2c_init(chip_series: &ChipSeries, i2c: &I2cConfig) -> TokenStream {
             }
         }
         ChipSeries::Esp32 => {
+            // The display drivers need `embedded_hal_async::i2c::I2c`, which esp-hal implements for
+            // the async driver only.
             quote! {
                 let display_i2c = ::esp_hal::i2c::master::I2c::new(
                     p.#instance, ::esp_hal::i2c::master::Config::default()
                 )
+                .unwrap()
                 .with_sda(p.#sda)
-                .with_scl(p.#scl);
+                .with_scl(p.#scl)
+                .into_async();
             }
         }
     }

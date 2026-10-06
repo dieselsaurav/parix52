@@ -1,15 +1,20 @@
 use embassy_time::Duration;
 use heapless::Vec;
 use rmk_types::fork::Fork;
+use rmk_types::keyboard_macros::MacroOp;
+use rmk_types::keycode::KeyCode;
 use rmk_types::morse::{Morse, MorseMode, MorseProfile};
 
 use crate::keyboard::combo::Combo;
-use crate::{COMBO_MAX_NUM, FORK_MAX_NUM, MACRO_SPACE_SIZE, MORSE_MAX_NUM, MOUSE_KEY_INTERVAL, MOUSE_WHEEL_INTERVAL};
+use crate::{
+    AUTO_MOUSE_LAYER_MAX_NUM, COMBO_MAX_NUM, FORK_MAX_NUM, MORSE_MAX_NUM, MORSE_PROFILE_MAX_NUM, MOUSE_KEY_INTERVAL,
+    MOUSE_WHEEL_INTERVAL,
+};
 
 /// Config for configurable action behavior
 #[derive(Debug, Default)]
 pub struct BehaviorConfig {
-    /// Base layer; restored from flash (LayoutConfig) on boot, set at runtime by DF/PDF
+    /// Base layer; restored from flash (`DefaultLayer`) on boot, set at runtime by DF/PDF
     pub default_layer: u8,
     pub tri_layer: Option<[u8; 3]>,
     pub tap: TapConfig,
@@ -18,8 +23,89 @@ pub struct BehaviorConfig {
     pub combo: CombosConfig,
     pub fork: ForksConfig,
     pub morse: MorsesConfig,
-    pub keyboard_macros: KeyboardMacrosConfig,
+    /// The default macros, `MACRO(i)` runs the `i`th. A host-written macro in
+    /// flash replaces its default. Check a hand-written table with
+    /// `const _: () = assert!(validate_default_macros(MACROS));`.
+    pub keyboard_macros: &'static [&'static [MacroOp]],
     pub mouse_key: MouseKeyConfig,
+    pub auto_mouse_layer: Vec<AutoMouseLayerConfig, AUTO_MOUSE_LAYER_MAX_NUM>,
+}
+
+/// Config for auto mouse layer behavior
+///
+/// When a pointing device reports motion above [`AutoMouseLayerConfig::threshold`],
+/// the configured [`AutoMouseLayerConfig::target_layer`] is activated. The layer
+/// is deactivated once no motion has been reported for [`AutoMouseLayerConfig::timeout`].
+///
+/// `device_id` selects which pointing device this entry applies to. Multiple
+/// entries can be configured; for each incoming [`crate::event::PointingEvent`]
+/// the matching entry (or a fallback entry with `device_id == None`) drives the
+/// layer state.
+#[derive(Clone, Debug)]
+pub struct AutoMouseLayerConfig {
+    /// Pointing device id this entry applies to. When `None`, the entry acts as
+    /// a fallback for devices not covered by any other entry.
+    pub device_id: Option<u8>,
+    /// Layer index to activate when pointing-device motion is detected
+    pub target_layer: u8,
+    /// Idle duration after the last motion before the layer is deactivated
+    pub timeout: Duration,
+    /// Minimum absolute X/Y axis delta to be considered as motion (must be `>= 1`)
+    pub threshold: u16,
+    /// When `true`, non-mouse key presses deactivate [`Self::target_layer`] immediately (mouse HID keys and [`Self::extra_mouse_keys`] excepted).
+    /// Keys are classified by their resolved action; macro-emitted keycodes, `Again`/`Repeat`,
+    /// and `GraveEscape` cannot be classified and never deactivate the layer.
+    /// Modifier-only actions (e.g. the hold side of `MT`) deactivate unless every contained
+    /// modifier is listed in [`Self::extra_mouse_keys`].
+    pub deactivate_on_key: bool,
+    /// Extra keycodes (e.g. modifiers) that do not trigger deactivation when [`Self::deactivate_on_key`] is set.
+    pub extra_mouse_keys: &'static [KeyCode],
+    /// When `true`, key presses that do NOT deactivate [`Self::target_layer`] extend the timeout deadline.
+    pub reset_timeout_on_key: bool,
+}
+
+impl Default for AutoMouseLayerConfig {
+    fn default() -> Self {
+        Self {
+            device_id: None,
+            target_layer: 0,
+            timeout: Duration::from_millis(500),
+            threshold: 1,
+            deactivate_on_key: false,
+            extra_mouse_keys: &[],
+            reset_timeout_on_key: false,
+        }
+    }
+}
+
+impl AutoMouseLayerConfig {
+    pub fn new(device_id: Option<u8>, target_layer: u8, timeout: Duration, threshold: u16) -> Self {
+        assert!(threshold >= 1, "AutoMouseLayerConfig::new: threshold must be >= 1");
+        assert!(
+            timeout >= Duration::from_millis(1),
+            "AutoMouseLayerConfig::new: timeout must be at least 1ms"
+        );
+        Self {
+            device_id,
+            target_layer,
+            timeout,
+            threshold,
+            ..Self::default()
+        }
+    }
+
+    /// Enable [`Self::deactivate_on_key`] with `exceptions` as additional non-deactivating keycodes.
+    pub fn with_deactivate_on_key(mut self, exceptions: &'static [KeyCode]) -> Self {
+        self.deactivate_on_key = true;
+        self.extra_mouse_keys = exceptions;
+        self
+    }
+
+    /// Enable [`Self::reset_timeout_on_key`].
+    pub fn with_reset_timeout_on_key(mut self) -> Self {
+        self.reset_timeout_on_key = true;
+        self
+    }
 }
 
 /// Configurations for tap behavior
@@ -46,6 +132,11 @@ pub struct MorsesConfig {
     pub prior_idle_time: Duration, //used only when flow tap is enabled
     pub default_profile: MorseProfile,
 
+    /// Named morse profiles (`[behavior.morse.profiles]`), indexed by
+    /// `KeyAction::TapHold(_, _, idx)`. A missing index resolves to the
+    /// default profile.
+    pub profiles: Vec<MorseProfile, MORSE_PROFILE_MAX_NUM>,
+
     pub morses: Vec<Morse, MORSE_MAX_NUM>,
 }
 
@@ -55,6 +146,7 @@ impl Default for MorsesConfig {
             enable_flow_tap: false,
             prior_idle_time: Duration::from_millis(120),
             default_profile: MorseProfile::new(Some(false), Some(MorseMode::Normal), Some(250u16), Some(250u16)),
+            profiles: Vec::new(),
             morses: Vec::new(),
         }
     }
@@ -112,26 +204,6 @@ pub struct ForksConfig {
 impl Default for ForksConfig {
     fn default() -> Self {
         Self { forks: Vec::new() }
-    }
-}
-
-#[derive(Debug)]
-pub struct KeyboardMacrosConfig {
-    /// macros stored in biunary format to be compatible with Vial
-    pub macro_sequences: [u8; MACRO_SPACE_SIZE],
-}
-
-impl Default for KeyboardMacrosConfig {
-    fn default() -> Self {
-        Self {
-            macro_sequences: [0; MACRO_SPACE_SIZE],
-        }
-    }
-}
-
-impl KeyboardMacrosConfig {
-    pub fn new(macro_sequences: [u8; MACRO_SPACE_SIZE]) -> Self {
-        Self { macro_sequences }
     }
 }
 

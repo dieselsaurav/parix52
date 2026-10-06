@@ -15,11 +15,11 @@ where
     DV: DisplayVariant,
     Self: DrawTarget<Color = BinaryColor>,
 {
-    async fn init(&mut self) -> bool {
-        GraphicsMode::init(self).await.is_ok()
+    async fn init(&mut self) {
+        GraphicsMode::init(self).await.ok();
     }
 
-    async fn flush(&mut self) -> bool {
-        GraphicsMode::flush(self).await.is_ok()
+    async fn flush(&mut self) {
+        GraphicsMode::flush(self).await.ok();
     }
 }

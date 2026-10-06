@@ -1,26 +1,39 @@
-use bt_hci::cmd::le::LeSetPhy;
-use bt_hci::controller::ControllerCmdAsync;
-use embassy_futures::join::join3;
-use embassy_time::{Duration, Timer, with_timeout};
+#[cfg(feature = "subrating")]
+use bt_hci::{cmd::le::LeSetHostFeature, controller::ControllerCmdSync};
+#[cfg(feature = "custom_message")]
+use embassy_futures::select::select;
+use embassy_time::{Duration, Timer};
+#[cfg(feature = "custom_message")]
+use postcard::experimental::max_size::MaxSize;
 use rmk_types::connection::ConnectionStatus;
 use trouble_host::prelude::*;
 
 #[cfg(feature = "storage")]
 use super::PeerAddress;
+use super::{GattSplitMessage, SplitMessage};
+use crate::ble::adv::{Adv, advertise};
+#[cfg(feature = "custom_message")]
+use crate::custom_message::{CustomMessage, CustomMessageTarget, forward};
 use crate::event::{CentralConnectedEvent, KeyboardEvent, SleepStateEvent, SubscribableEvent, publish_event};
 use crate::split::driver::{SplitDriverError, SplitReader, SplitWriter};
 use crate::split::peripheral::SplitPeripheral;
-use crate::split::{SPLIT_MESSAGE_MAX_SIZE, SplitMessage};
 use crate::state::update_status;
 
 /// Gatt service used in split peripheral to send split message to central
 #[gatt_service(uuid = "4dd5fbaa-18e5-4b07-bf0a-353698659946")]
 pub(crate) struct SplitBleService {
     #[characteristic(uuid = "0e6313e3-bd0b-45c2-8d2e-37a2e8128bc3", read, notify, indicate)]
-    pub(crate) message_to_central: [u8; SPLIT_MESSAGE_MAX_SIZE],
+    pub(crate) message_to_central: GattSplitMessage,
 
     #[characteristic(uuid = "4b3514fb-cae4-4d38-a097-3a2a3d1c3b9c", write_without_response, read, notify)]
-    pub(crate) message_to_peripheral: [u8; SPLIT_MESSAGE_MAX_SIZE],
+    pub(crate) message_to_peripheral: GattSplitMessage,
+
+    #[cfg(feature = "custom_message")]
+    #[characteristic(uuid = "5f2a7c14-9b3e-4a51-8d76-2c1e4b8a6f03", read, notify)]
+    pub(crate) custom_to_central: heapless::Vec<u8, { crate::custom_message::CustomMessage::POSTCARD_MAX_SIZE }>,
+    #[cfg(feature = "custom_message")]
+    #[characteristic(uuid = "5f2a7c15-9b3e-4a51-8d76-2c1e4b8a6f03", write_without_response, read)]
+    pub(crate) custom_to_peripheral: heapless::Vec<u8, { crate::custom_message::CustomMessage::POSTCARD_MAX_SIZE }>,
 }
 
 /// Gatt server in split peripheral
@@ -31,16 +44,21 @@ pub(crate) struct BleSplitPeripheralServer {
 
 /// BLE driver for split peripheral
 pub(crate) struct BleSplitPeripheralDriver<'stack, 'server, 'c, P: PacketPool> {
-    message_to_peripheral: Characteristic<[u8; SPLIT_MESSAGE_MAX_SIZE]>,
-    message_to_central: Characteristic<[u8; SPLIT_MESSAGE_MAX_SIZE]>,
+    message_to_peripheral: Characteristic<GattSplitMessage>,
+    message_to_central: Characteristic<GattSplitMessage>,
+    #[cfg(feature = "custom_message")]
+    custom_to_peripheral:
+        Characteristic<heapless::Vec<u8, { crate::custom_message::CustomMessage::POSTCARD_MAX_SIZE }>>,
     conn: &'c GattConnection<'stack, 'server, P>,
 }
 
 impl<'stack, 'server, 'c, P: PacketPool> BleSplitPeripheralDriver<'stack, 'server, 'c, P> {
     pub(crate) fn new(server: &'server BleSplitPeripheralServer, conn: &'c GattConnection<'stack, 'server, P>) -> Self {
         Self {
-            message_to_central: server.service.message_to_central,
-            message_to_peripheral: server.service.message_to_peripheral,
+            message_to_central: server.service.message_to_central.clone(),
+            message_to_peripheral: server.service.message_to_peripheral.clone(),
+            #[cfg(feature = "custom_message")]
+            custom_to_peripheral: server.service.custom_to_peripheral.clone(),
             conn,
         }
     }
@@ -63,14 +81,39 @@ impl<'stack, 'server, 'c, P: PacketPool> SplitReader for BleSplitPeripheralDrive
                         GattEvent::Write(event) => {
                             // Write to peripheral
                             if event.handle() == self.message_to_peripheral.handle {
-                                trace!("Got message from central: {:?}", event.data());
-                                match postcard::from_bytes::<SplitMessage>(event.data()) {
+                                let parsed = event.with_data(|_, data| {
+                                    trace!("Got message from central: {:?}", data);
+                                    postcard::from_bytes::<SplitMessage>(data)
+                                });
+                                match parsed {
                                     Ok(message) => {
                                         trace!("Message from central: {:?}", message);
                                         break message;
                                     }
                                     Err(e) => error!("Postcard deserialize split message error: {}", e),
                                 }
+                            } else if cfg!(feature = "custom_message") && {
+                                #[cfg(feature = "custom_message")]
+                                {
+                                    event.handle() == self.custom_to_peripheral.handle
+                                }
+                                #[cfg(not(feature = "custom_message"))]
+                                {
+                                    false
+                                }
+                            } {
+                                // Not a `SplitMessage`, so the read goes on.
+                                // A peripheral has nowhere to forward to.
+                                #[cfg(feature = "custom_message")]
+                                event.with_data(|_, data| match postcard::from_bytes::<CustomMessage>(data) {
+                                    // An end of the chain: it delivers what names it and
+                                    // has nowhere to relay the rest to.
+                                    Ok(message) => match message.target {
+                                        CustomMessageTarget::Peripherals => publish_event(message),
+                                        _ => (),
+                                    },
+                                    Err(_) => warn!("[split] undecodable custom message dropped"),
+                                });
                             } else {
                                 info!("Gatt write other event: {:?}", event.handle());
                             }
@@ -86,16 +129,26 @@ impl<'stack, 'server, 'c, P: PacketPool> SplitReader for BleSplitPeripheralDrive
                     conn_interval,
                     peripheral_latency,
                     supervision_timeout,
-                } => {
-                    info!(
-                        "Connection parameters updated: {:?}ms, {:?}, {:?}ms",
-                        conn_interval.as_millis(),
-                        peripheral_latency,
-                        supervision_timeout.as_millis()
-                    );
-                }
+                } => info!(
+                    "[split] params updated: interval {:?}us, latency {:?}, timeout {:?}ms",
+                    conn_interval.as_micros(),
+                    peripheral_latency,
+                    supervision_timeout.as_millis()
+                ),
+                GattConnectionEvent::SubratingParamsUpdated {
+                    subrate_factor,
+                    peripheral_latency,
+                    continuation_number,
+                    supervision_timeout,
+                } => info!(
+                    "[split] subrating updated: subrate {:?}, latency {:?}, continuation {:?}, timeout {:?}ms",
+                    subrate_factor,
+                    peripheral_latency,
+                    continuation_number,
+                    supervision_timeout.as_millis()
+                ),
                 GattConnectionEvent::PhyUpdated { tx_phy, rx_phy } => {
-                    info!("PHY updated: {:?}, {:?}", tx_phy, rx_phy);
+                    info!("[split] PHY updated: {:?}, {:?}", tx_phy, rx_phy)
                 }
                 _ => (),
             }
@@ -106,17 +159,32 @@ impl<'stack, 'server, 'c, P: PacketPool> SplitReader for BleSplitPeripheralDrive
 
 impl<'stack, 'server, 'c, P: PacketPool> SplitWriter for BleSplitPeripheralDriver<'stack, 'server, 'c, P> {
     async fn write(&mut self, message: &SplitMessage) -> Result<usize, SplitDriverError> {
-        let mut buf = [0_u8; SPLIT_MESSAGE_MAX_SIZE];
-        postcard::to_slice(message, &mut buf).map_err(|e| {
-            error!("Postcard serialize split message error: {}", e);
-            SplitDriverError::SerializeError
-        })?;
-        info!("Writing split message to central: {:?}", message);
-        self.message_to_central.notify(self.conn, &buf).await.map_err(|e| {
-            error!("BLE notify error: {:?}", e);
-            SplitDriverError::BleError(1)
-        })?;
-        Ok(buf.len())
+        let gatt_msg = GattSplitMessage::try_from(message)?;
+        debug!("Writing split message to central: {:?}", message);
+        self.message_to_central
+            .notify(self.conn, &gatt_msg, true)
+            .await
+            .map_err(|e| {
+                error!("BLE notify error: {:?}", e);
+                SplitDriverError::BleError(1)
+            })?;
+        Ok(gatt_msg.len)
+    }
+}
+
+/// Let the controller accept the central's subrate requests on the split link.
+///
+/// Must run concurrently with `ble_task()` (whose runner serves the HCI command)
+/// and before any advertising, since the flag only applies to links opened after
+/// it is set.
+#[cfg(feature = "subrating")]
+async fn init_subrating_host_feature<C: Controller + ControllerCmdSync<LeSetHostFeature>>(
+    stack: &Stack<'_, C, impl PacketPool>,
+) {
+    const CONN_SUBRATING_HOST_BIT: u8 = 38;
+    let cmd = LeSetHostFeature::new(CONN_SUBRATING_HOST_BIT, 1);
+    if let Err(e) = stack.command(cmd).await {
+        error!("[split_peri] error setting subrating host feature flag: {:?}", e);
     }
 }
 
@@ -127,7 +195,12 @@ impl<'stack, 'server, 'c, P: PacketPool> SplitWriter for BleSplitPeripheralDrive
 /// * `id` - The id of the peripheral
 /// * `central_addr` - The address of the central
 /// * `stack` - The stack to use
-pub async fn initialize_nrf_ble_split_peripheral_and_run<'b, 's: 'b, C: Controller + ControllerCmdAsync<LeSetPhy>>(
+pub async fn initialize_nrf_ble_split_peripheral_and_run<
+    'b,
+    's: 'b,
+    #[cfg(feature = "subrating")] C: Controller + ControllerCmdSync<LeSetHostFeature>,
+    #[cfg(not(feature = "subrating"))] C: Controller,
+>(
     id: usize,
     stack: &'b Stack<'s, C, DefaultPacketPool>,
 ) {
@@ -137,16 +210,21 @@ pub async fn initialize_nrf_ble_split_peripheral_and_run<'b, 's: 'b, C: Controll
     let runner = stack.runner();
 
     // First, read central address from storage
-    let mut central_addr = crate::storage::read_peer_address(0)
-        .await
-        .filter(|a| a.is_valid)
-        .map(|a| a.address);
+    let mut central_addr = match crate::storage::read(crate::storage::StorageKey::PeerAddress(0)).await {
+        Ok(Some(crate::storage::StorageValue::PeerAddress(a))) if a.is_valid => Some(a.address),
+        _ => None,
+    };
 
     let peri_task = async {
+        // Set subrating host support before any advertising/connecting
+        #[cfg(feature = "subrating")]
+        init_subrating_host_feature(stack).await;
+
         let server = BleSplitPeripheralServer::new_default("rmk").unwrap();
         loop {
             update_status(|c| *c = ConnectionStatus::new());
             publish_event(CentralConnectedEvent { connected: false });
+            publish_event(SleepStateEvent::new(false));
             match split_peripheral_advertise(id, central_addr, &mut peripheral, &server).await {
                 Ok(conn) => {
                     info!("Connected to the central");
@@ -155,22 +233,34 @@ pub async fn initialize_nrf_ble_split_peripheral_and_run<'b, 's: 'b, C: Controll
                     let new_addr = conn.raw().peer_address().addr.into_inner();
                     if central_addr != Some(new_addr) {
                         info!("Saving central address to storage");
-                        if crate::storage::write_peer_address(PeerAddress {
-                            peer_id: 0,
-                            is_valid: true,
-                            address: new_addr,
-                        })
+                        // RAM only follows flash here: a peer we cannot persist must be
+                        // rediscovered after a reboot rather than silently trusted.
+                        if crate::storage::store(crate::storage::StorageItem::PeerAddress(PeerAddress::new(
+                            0, true, new_addr,
+                        )))
                         .await
+                        .is_ok()
                         {
                             central_addr = Some(new_addr);
                         }
                     }
+                    #[cfg(not(feature = "custom_message"))]
                     peripheral.run().await;
+                    #[cfg(feature = "custom_message")]
+                    select(peripheral.run(), {
+                        // A peripheral has one link, so everything queued goes out on it.
+                        let custom_to_central = &server.service.custom_to_central;
+                        forward(None, async |encoded| {
+                            custom_to_central.notify_raw(&conn, encoded, false).await
+                        })
+                    })
+                    .await;
                     info!("Disconnected from the central");
                 }
                 Err(BleHostError::BleHost(Error::Timeout)) => {
                     // Timeout, wait new keys to continue
                     error!("Connect to central timeout");
+                    publish_event(SleepStateEvent::new(true));
                     let mut sub = KeyboardEvent::subscriber();
                     sub.clear();
                     let _ = sub.next_message_pure().await;
@@ -187,10 +277,10 @@ pub async fn initialize_nrf_ble_split_peripheral_and_run<'b, 's: 'b, C: Controll
         }
     };
 
-    // A key pressed on this half is activity, whether or not a central is
-    // there to hear about it. The central tells us to sleep after its idle
-    // timeout and only it can tell us to wake -- so once it was switched off
-    // while we slept, the display and the lights stayed dark through every
+    // PARIX PATCH: a key pressed on this half is activity, whether or not a
+    // central is there to hear about it. The central tells us to sleep after
+    // its idle timeout and only it can tell us to wake, so once it was switched
+    // off while we slept, the display and the lights stayed dark through every
     // key press until a central reconnected. Track the last sleep state we
     // were told and clear it ourselves on the first local key.
     let local_wake = async {
@@ -210,95 +300,24 @@ pub async fn initialize_nrf_ble_split_peripheral_and_run<'b, 's: 'b, C: Controll
         }
     };
 
-    join3(ble_task(runner), peri_task, local_wake).await;
+    embassy_futures::join::join3(crate::ble::ble_task(runner, &crate::ble::NoopHandler), peri_task, local_wake).await;
 }
 
-/// Create an advertiser to use to connect to a BLE Central, and wait for it to connect.
+/// Reconnect to the saved central, falling back to seeking any central when it
+/// does not answer.
 async fn split_peripheral_advertise<'a, 'b, C: Controller>(
     id: usize,
     central_addr: Option<[u8; 6]>,
     peripheral: &mut Peripheral<'a, C, DefaultPacketPool>,
     server: &'b BleSplitPeripheralServer<'_>,
 ) -> Result<GattConnection<'a, 'b, DefaultPacketPool>, BleHostError<C::Error>> {
-    let mut advertiser_data = [0; 31];
-    let advertisement = get_peri_advertiser::<C>(id, central_addr, &mut advertiser_data)?;
-
-    let advertiser = peripheral
-        .advertise(&AdvertisementParameters::default(), advertisement)
-        .await?;
-
-    match with_timeout(Duration::from_secs(10), advertiser.accept()).await {
-        Ok(conn_res) => {
-            let conn = conn_res?.with_attribute_server(server)?;
-            info!("[adv] connection established");
-            Ok(conn)
-        }
-        Err(_) => {
-            warn!("[adv] Try update central_addr");
-            // Advertise without central addr
-            let advertisement = get_peri_advertiser::<C>(id, None, &mut advertiser_data)?;
-            let advertiser = peripheral
-                .advertise(&AdvertisementParameters::default(), advertisement)
-                .await?;
-            match with_timeout(Duration::from_secs(300), advertiser.accept()).await {
-                Ok(re) => Ok(re?.with_attribute_server(server)?),
-                Err(_e) => Err(BleHostError::BleHost(Error::Timeout)),
-            }
+    if let Some(addr) = central_addr {
+        let directed = Adv::Directed(Address::random(addr));
+        match advertise(peripheral, &server.server, directed, Duration::from_secs(10)).await {
+            Err(BleHostError::BleHost(Error::Timeout)) => warn!("[adv] Try update central_addr"),
+            result => return result,
         }
     }
-}
-
-fn get_peri_advertiser<'a, C: Controller>(
-    id: usize,
-    central_addr: Option<[u8; 6]>,
-    advertiser_data: &'a mut [u8; 31],
-) -> Result<Advertisement<'a>, BleHostError<C::Error>> {
-    let advertisement = match central_addr {
-        Some(addr) => Advertisement::ConnectableNonscannableDirected {
-            peer: Address::random(addr),
-        },
-        None => {
-            info!("No central address provided, so we advertise as undirected");
-            // No central address provided, so we advertise as undirected
-            AdStructure::encode_slice(
-                &[
-                    AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
-                    AdStructure::CompleteServiceUuids128(&[
-                        // uuid: 4dd5fbaa-18e5-4b07-bf0a-353698659946
-                        [
-                            70u8, 153u8, 101u8, 152u8, 54u8, 53u8, 10u8, 191u8, 7u8, 75u8, 229u8, 24u8, 170u8, 251u8,
-                            213u8, 77u8,
-                        ],
-                    ]),
-                    AdStructure::ManufacturerSpecificData {
-                        company_identifier: 0xe118,
-                        payload: &[id as u8],
-                    },
-                ],
-                &mut advertiser_data[..],
-            )?;
-            trace!("Advertising data: {:?}", advertiser_data);
-            Advertisement::ConnectableScannableUndirected {
-                adv_data: &advertiser_data[..],
-                scan_data: &[],
-            }
-        }
-    };
-    Ok(advertisement)
-}
-
-/// This is a background task that is required to run forever alongside any other BLE tasks.
-async fn ble_task<C: Controller + ControllerCmdAsync<LeSetPhy>, P: PacketPool>(mut runner: Runner<'_, C, P>) {
-    loop {
-        if let Err(e) = runner.run().await {
-            #[cfg(feature = "defmt")]
-            let e = defmt::Debug2Format(&e);
-            // Reboot rather than restart the runner: a restart sends an HCI
-            // Reset that leaves the old link recorded as Connected, so the
-            // peripheral would never advertise again. See ble/mod.rs.
-            error!("[ble_task] runner error, rebooting: {:?}", e);
-            Timer::after_millis(100).await;
-            crate::boot::reboot_keyboard();
-        }
-    }
+    let seeking = Adv::SplitPeripheral { id: id as u8 };
+    advertise(peripheral, &server.server, seeking, Duration::from_secs(300)).await
 }

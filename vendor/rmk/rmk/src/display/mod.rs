@@ -60,18 +60,6 @@ mod renderers;
 pub use display_interface_i2c;
 use embassy_futures::select::{Either, Either3, select, select3};
 use embassy_time::{Duration, Instant, Ticker, Timer};
-
-/// How long to wait before asking an unresponsive display to init again.
-const INIT_RETRY_INTERVAL: Duration = Duration::from_secs(5);
-
-/// Longest a single display transfer may take. A full 128x32 frame is about
-/// 50 ms at 100 kHz. The nRF I2C driver has no timeout of its own: with SCL
-/// or SDA held low (a solder bridge at the header, a module plugged in wrong)
-/// a transfer never ends. This task subscribes to every key event, so a
-/// transfer that never ends fills the 16-slot key queue and the matrix stops
-/// publishing: the last key sent stays down on the host and repeats. A stuck
-/// display must never cost the keyboard its keys.
-const IO_TIMEOUT: Duration = Duration::from_millis(250);
 use embedded_graphics::prelude::*;
 #[cfg(feature = "lcd_async")]
 pub use lcd_async;
@@ -96,6 +84,8 @@ use crate::event::{
 };
 #[cfg(feature = "split")]
 use crate::event::{CentralConnectedEvent, PeripheralConnectedEvent};
+#[cfg(feature = "dongle")]
+use crate::event::{DongleState, DongleStateEvent};
 use crate::processor::Processor;
 
 /// Snapshot of keyboard state passed to renderers on every redraw.
@@ -107,10 +97,16 @@ use crate::processor::Processor;
 /// - `ble_status` — requires the `_ble` feature
 /// - `central_connected`, `peripherals_connected` — require the `split` feature
 /// - `peripheral_batteries` — requires both `split` and `_ble` features
+/// - `dongle_state` — requires the `dongle` feature
 ///
 /// Third-party renderers that access these fields must enable the
 /// corresponding features in their `Cargo.toml` dependency on `rmk`,
 /// and guard access with matching `#[cfg]` attributes.
+/// PARIX PATCH: longest a display transfer may take, and how long a panel
+/// that timed out is left alone.
+const IO_TIMEOUT: Duration = Duration::from_millis(250);
+const IO_RETRY_INTERVAL: Duration = Duration::from_secs(5);
+
 pub struct RenderContext {
     /// Current active layer index.
     pub layer: u8,
@@ -124,7 +120,7 @@ pub struct RenderContext {
     pub battery: BatteryStatusEvent,
     /// Whether the keyboard is sleeping.
     pub sleeping: bool,
-    /// Current BLE connection status (profile + state).
+    /// Current BLE status (active profile, connection state, and bond presence).
     #[cfg(feature = "_ble")]
     pub ble_status: BleStatus,
     /// Whether the central is connected (only meaningful on peripherals).
@@ -136,6 +132,9 @@ pub struct RenderContext {
     /// Per-peripheral battery status, indexed by peripheral id.
     #[cfg(all(feature = "split", feature = "_ble"))]
     pub peripheral_batteries: [BatteryStatusEvent; crate::SPLIT_PERIPHERALS_NUM],
+    /// The dongle's link to its keyboard (only meaningful on a dongle).
+    #[cfg(feature = "dongle")]
+    pub dongle_state: DongleState,
     /// Currently active modifier keys (Shift, Ctrl, Alt, GUI).
     pub modifiers: ModifierCombination,
     /// Whether a key is currently held down.
@@ -165,6 +164,8 @@ impl Default for RenderContext {
             #[cfg(all(feature = "split", feature = "_ble"))]
             peripheral_batteries: [BatteryStatusEvent(rmk_types::battery::BatteryStatus::Unavailable);
                 crate::SPLIT_PERIPHERALS_NUM],
+            #[cfg(feature = "dongle")]
+            dongle_state: DongleState::default(),
             modifiers: ModifierCombination::new(),
             key_pressed: false,
             key_press_latch: false,
@@ -179,13 +180,10 @@ impl Default for RenderContext {
 ///
 /// RMK provides built-in implementations behind feature flags (e.g. `ssd1306`).
 pub trait DisplayDriver: DrawTarget {
-    /// Initialize the display hardware. Returns `false` when the panel did
-    /// not answer, so the processor can stop driving a display that is not
-    /// there instead of treating every render as if it had succeeded.
-    fn init(&mut self) -> impl core::future::Future<Output = bool>;
-    /// Flush the framebuffer to the display. Returns `false` on a bus error,
-    /// after which the processor re-initialises before the next render.
-    fn flush(&mut self) -> impl core::future::Future<Output = bool>;
+    /// Initialize the display hardware.
+    fn init(&mut self) -> impl core::future::Future<Output = ()>;
+    /// Flush the framebuffer to the display.
+    fn flush(&mut self) -> impl core::future::Future<Output = ()>;
 }
 
 /// Trait for custom display renderers.
@@ -242,6 +240,7 @@ pub trait DisplayRenderer<C: PixelColor> {
 #[cfg_attr(feature = "_ble", processor(subscribe = [ConnectionStatusChangeEvent]))]
 #[cfg_attr(feature = "split", processor(subscribe = [PeripheralConnectedEvent, CentralConnectedEvent]))]
 #[cfg_attr(all(feature = "split", feature = "_ble"), processor(subscribe = [PeripheralBatteryEvent]))]
+#[cfg_attr(feature = "dongle", processor(subscribe = [DongleStateEvent]))]
 #[::rmk::macros::runnable_generated]
 pub struct DisplayProcessor<D, R = LogoRenderer>
 where
@@ -252,9 +251,8 @@ where
     renderer: R,
     ctx: RenderContext,
     initialized: bool,
-    /// When the last failed `init()` happened. A panel that does not answer
-    /// is retried on a backoff, not on every event.
-    last_init_failure: Option<Instant>,
+    /// PARIX PATCH: when a transfer last timed out; the panel is left alone for a while after.
+    io_failed_at: Option<Instant>,
     last_render: Instant,
     pending_render: bool,
     /// Minimum time between renders (rate-limiter for event-driven renders).
@@ -293,7 +291,7 @@ where
             renderer,
             ctx: RenderContext::default(),
             initialized: false,
-            last_init_failure: None,
+            io_failed_at: None,
             last_render: Instant::from_ticks(0),
             pending_render: false,
             min_render_interval: Duration::from_millis(33),
@@ -348,35 +346,30 @@ where
             return;
         }
 
+        // PARIX PATCH: the nRF I2C driver has no timeout, and this task
+        // subscribes to key events. A transfer that never ends would fill
+        // the key queue and stop the matrix. Bound every transfer, and leave
+        // a panel that timed out alone for a while.
+        if self.io_failed_at.is_some_and(|t| t.elapsed() < IO_RETRY_INTERVAL) {
+            self.pending_render = false;
+            return;
+        }
         if !self.initialized {
-            // A display that never answered (not fitted, wrong address,
-            // broken cable) must not turn every key event into a bus
-            // transaction. Retry now and then; drop the render otherwise.
-            if self
-                .last_init_failure
-                .is_some_and(|t| t.elapsed() < INIT_RETRY_INTERVAL)
-            {
+            if embassy_time::with_timeout(IO_TIMEOUT, self.display.init()).await.is_err() {
+                self.io_failed_at = Some(Instant::now());
                 self.pending_render = false;
                 return;
             }
-            if matches!(embassy_time::with_timeout(IO_TIMEOUT, self.display.init()).await, Ok(true)) {
-                self.initialized = true;
-                self.last_init_failure = None;
-            } else {
-                warn!("Display did not answer init, retrying in {} s", INIT_RETRY_INTERVAL.as_secs());
-                self.last_init_failure = Some(Instant::now());
-                self.pending_render = false;
-                self.last_render = Instant::now();
-                return;
-            }
+            self.initialized = true;
         }
 
         self.renderer.render(&self.ctx, &mut self.display);
         self.ctx.key_press_latch = false;
-        if !matches!(embassy_time::with_timeout(IO_TIMEOUT, self.display.flush()).await, Ok(true)) {
-            // Bus error mid-life: re-init before the next render.
+        if embassy_time::with_timeout(IO_TIMEOUT, self.display.flush()).await.is_err() {
+            self.io_failed_at = Some(Instant::now());
             self.initialized = false;
-            self.last_init_failure = Some(Instant::now());
+        } else {
+            self.io_failed_at = None;
         }
 
         self.pending_render = false;
@@ -446,6 +439,12 @@ where
         if let Some(slot) = self.ctx.peripheral_batteries.get_mut(event.id) {
             *slot = event.state;
         }
+        self.render().await;
+    }
+
+    #[cfg(feature = "dongle")]
+    async fn on_dongle_state_event(&mut self, event: DongleStateEvent) {
+        self.ctx.dongle_state = event.0;
         self.render().await;
     }
 }

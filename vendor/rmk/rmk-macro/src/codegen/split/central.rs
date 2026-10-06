@@ -2,6 +2,7 @@ use core::panic;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
+use rmk_config::SplitConnection;
 use rmk_config::resolved::Hardware;
 use rmk_config::resolved::hardware::{
     BoardConfig, ChipModel, ChipSeries, SerialConfig, SplitConfig,
@@ -16,27 +17,18 @@ pub(crate) fn expand_split_central_config(hardware: &Hardware) -> proc_macro2::T
 }
 
 fn expand_split_communication_config(chip: &ChipModel, split_config: &SplitConfig) -> TokenStream2 {
-    match &split_config.connection[..] {
-        "ble" => {
-            // We need to create addrs for BLE
-            let num_peripheral = split_config.peripheral.len();
-            // Peripherals with a fixed `ble_addr` in keyboard.toml are known at
-            // build time: their slots are filled here so the central connects
-            // to them directly instead of scanning for any RMK peripheral and
-            // trusting whatever address an earlier scan left in flash.
-            let seed_addrs = split_config.peripheral.iter().enumerate().filter_map(|(i, p)| {
-                p.ble_addr.map(|addr| quote! {
-                    peripheral_addrs.borrow_mut()[#i] = Some([ #(#addr),* ]);
-                    ::rmk::split::ble::central::set_configured_peripheral_addr(#i, [ #(#addr),* ]);
+    match split_config.connection {
+        // The BLE transport loads its peripherals' addresses itself; PARIX
+        // PATCH: addresses fixed in keyboard.toml are handed to it first.
+        SplitConnection::Ble => {
+            let seeds = split_config.peripheral.iter().enumerate().filter_map(|(i, p)| {
+                p.ble_addr.map(|addr| {
+                    quote! { ::rmk::split::ble::central::set_configured_peripheral_addr(#i, [ #(#addr),* ]); }
                 })
             });
-            quote! {
-                // Must run before the storage task starts (both need `&mut storage`).
-                let peripheral_addrs = storage.read_peripheral_addresses::<#num_peripheral>().await;
-                #(#seed_addrs)*
-            }
+            quote! { #(#seeds)* }
         }
-        "serial" => {
+        SplitConnection::Serial => {
             // We need to initialize serial instance for serial
             let serial_config: Vec<SerialConfig> = split_config
                 .central
@@ -45,7 +37,6 @@ fn expand_split_communication_config(chip: &ChipModel, split_config: &SplitConfi
                 .expect("central.serial is required");
             expand_serial_init(chip, serial_config)
         }
-        _ => panic!("Invalid connection type for split"),
     }
 }
 
