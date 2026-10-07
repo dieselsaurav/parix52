@@ -11,7 +11,9 @@
 //!   top-right     the links to the computer, `USB` when one is plugged in
 //!                 and `BT` with the profile number: plain when connected,
 //!                 `..` paired and looking for its computer, `?` nothing
-//!                 paired. The one in the filled box is where typing goes.
+//!                 paired. The one in the filled box is where typing goes;
+//!                 an outline marks the one chosen with the toggle when
+//!                 it cannot be used.
 //!   bottom-left   the modifiers held now, as their Mac symbols in home-row
 //!                 order (Cmd Opt Ctrl Shift), and a boxed A for Caps Lock
 //!   bottom-right  both batteries, left then right, each with a bar under it;
@@ -56,6 +58,9 @@ pub struct View<'a> {
     pub profile: u8,
     pub bt: Bt,
     pub active: Active,
+    /// The output chosen with the USB/Bluetooth toggle is Bluetooth. Shown
+    /// as an outline when the choice cannot be honoured.
+    pub prefer_bluetooth: bool,
     /// Left battery, percent.
     pub left: Option<u8>,
     /// Right battery, percent; `None` when unknown.
@@ -159,19 +164,28 @@ fn battery<D: DrawTarget<Color = BinaryColor>>(d: &mut D, right: i32, label: cha
     }
 }
 
-/// A word on the top line with its left edge at `x`; `active` draws it
-/// dark on a filled box.
-fn tag<D: DrawTarget<Color = BinaryColor>>(d: &mut D, x: i32, text: &str, active: bool) {
+#[derive(Clone, Copy, PartialEq)]
+enum Tag {
+    Plain,
+    Outlined,
+    Filled,
+}
+
+/// A word on the top line with its left edge at `x`.
+fn tag<D: DrawTarget<Color = BinaryColor>>(d: &mut D, x: i32, text: &str, style: Tag) {
     let small = FontRenderer::new::<fonts::u8g2_font_6x12_tr>();
     let w = text.len() as u32 * 6;
-    let color = if active {
-        Rectangle::new(Point::new(x - 2, 0), Size::new(w + 3, 13))
-            .into_styled(PrimitiveStyle::with_fill(ON))
-            .draw(d)
-            .ok();
-        FontColor::Transparent(BinaryColor::Off)
-    } else {
-        FontColor::Transparent(ON)
+    let bounds = Rectangle::new(Point::new(x - 2, 0), Size::new(w + 3, 13));
+    let color = match style {
+        Tag::Filled => {
+            bounds.into_styled(PrimitiveStyle::with_fill(ON)).draw(d).ok();
+            FontColor::Transparent(BinaryColor::Off)
+        }
+        Tag::Outlined => {
+            bounds.into_styled(PrimitiveStyle::with_stroke(ON, 1)).draw(d).ok();
+            FontColor::Transparent(ON)
+        }
+        Tag::Plain => FontColor::Transparent(ON),
     };
     small
         .render_aligned(text, Point::new(x, 1), VerticalPosition::Top, HorizontalAlignment::Left, color, d)
@@ -197,9 +211,22 @@ pub fn draw<D: DrawTarget<Color = BinaryColor>>(d: &mut D, v: &View) {
     };
     let bt_w = bt.len() as i32 * 6;
     let bt_x = 126 - bt_w;
-    tag(d, bt_x, bt.as_str(), v.active == Active::Bluetooth);
+    // Filled = carrying the typing. Outlined = chosen with the toggle but
+    // not usable, so the typing has fallen back to the other link (or goes
+    // nowhere): Bluetooth chosen while its profile is not connected, or USB
+    // chosen with no computer on the cable.
+    let style = |active: bool, chosen: bool| {
+        if active {
+            Tag::Filled
+        } else if chosen {
+            Tag::Outlined
+        } else {
+            Tag::Plain
+        }
+    };
+    tag(d, bt_x, bt.as_str(), style(v.active == Active::Bluetooth, v.prefer_bluetooth));
     if v.usb {
-        tag(d, bt_x - 6 - 18, "USB", v.active == Active::Usb);
+        tag(d, bt_x - 7 - 18, "USB", style(v.active == Active::Usb, !v.prefer_bluetooth));
     }
 
     // Bottom-left: held modifiers in home-row order, then Caps Lock.

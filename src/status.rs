@@ -78,6 +78,7 @@ impl DisplayRenderer<BinaryColor> for StatusRenderer {
                 profile: ctx.ble_status.profile,
                 bt,
                 active,
+                prefer_bluetooth: ctx.preferred_output == ConnectionType::Ble,
                 left: percent(&ctx.battery),
                 right: ctx.peripheral_batteries.first().and_then(|b| percent(b)),
                 right_linked: ctx.peripherals_connected.first().copied().unwrap_or(false),

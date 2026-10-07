@@ -131,6 +131,11 @@ pub struct RenderContext {
     /// PARIX PATCH: a computer has configured the USB port.
     #[cfg(feature = "_ble")]
     pub usb_connected: bool,
+    /// PARIX PATCH: the output chosen with the USB/BLE toggle. It is used
+    /// when both links are ready; with only one ready, that one is used
+    /// whatever the choice.
+    #[cfg(feature = "_ble")]
+    pub preferred_output: rmk_types::connection::ConnectionType,
     /// Whether the central is connected (only meaningful on peripherals).
     #[cfg(feature = "split")]
     pub central_connected: bool,
@@ -169,6 +174,8 @@ impl Default for RenderContext {
             active_output: None,
             #[cfg(feature = "_ble")]
             usb_connected: false,
+            #[cfg(feature = "_ble")]
+            preferred_output: rmk_types::connection::ConnectionType::Ble,
             #[cfg(feature = "split")]
             central_connected: false,
             #[cfg(feature = "split")]
@@ -450,6 +457,7 @@ where
         self.ctx.ble_status = event.0.ble;
         self.ctx.active_output = event.0.decide_active();
         self.ctx.usb_connected = event.0.usb == rmk_types::connection::UsbState::Configured;
+        self.ctx.preferred_output = event.0.preferred;
         self.render().await;
     }
 
@@ -499,6 +507,7 @@ where
             let status = crate::state::current_connection_status();
             self.ctx.active_output = status.decide_active();
             self.ctx.usb_connected = status.usb == rmk_types::connection::UsbState::Configured;
+            self.ctx.preferred_output = status.preferred;
         }
 
         self.pending_render = true;
