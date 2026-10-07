@@ -29,11 +29,15 @@ pub const NUM_LEDS: usize = 26;
 const NUM_KEYS: usize = 52;
 const NUM_LAYERS: usize = 8;
 
-/// Highest value any colour channel may take (of 255). 26 LEDs at full white
-/// draw about 1.6 A per half (paraboard docs/BOM.md), which neither the
-/// module's regulator nor the cell can supply; the build fails on a palette
-/// entry above this.
-const MAX_CHANNEL: u8 = 32;
+/// The most the three channels of a palette colour may add up to. Palette
+/// values are in units that the brightness step multiplies (see
+/// `BRIGHTNESS_32NDS`): at the top step a channel of 32 is sent as 80 of 255.
+/// 26 LEDs at full white draw about 1.6 A per half (paraboard docs/BOM.md),
+/// which neither the module's regulator nor the cell can supply. With this
+/// cap a half lit in one colour stays near 250 mA at the top step (figured
+/// from the LED's 20 mA per channel, not measured). The build fails on a
+/// palette entry above it.
+const MAX_SUM: u16 = 48;
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 // Three-letter names so the grids below line up. The keycaps are white with
@@ -41,7 +45,7 @@ const MAX_CHANNEL: u8 = 32;
 // one or two channels; a three-channel mix at these low levels comes out
 // uneven from LED to LED. White is the exception and keeps its channels equal.
 const ___: Rgb = (0, 0, 0); //    dark: the key does nothing here
-const WHT: Rgb = (26, 26, 26); // white: light, brightness and output keys on MEDIA
+const WHT: Rgb = (12, 12, 12); // white: light, brightness and output keys on MEDIA
 const NAV: Rgb = (0, 10, 30); //  blue: NAV layer, arrows, Bluetooth profiles
 const NUM: Rgb = (0, 28, 0); //   green: NUM layer, digits
 const MED: Rgb = (16, 0, 30); //  violet: MEDIA layer, transport, volume
@@ -156,10 +160,11 @@ const fn key_index(side: Side, led: usize) -> usize {
     }
 }
 
-/// What the base layer's plain keys can be lit in; Space + U steps through
-/// them. Even white first, then round the colour wheel.
-const BASE_COLORS: [Rgb; rmk::key_light::BASE_COLORS as usize] = [
-    (20, 20, 20), // white
+/// The solid colours the base layer's plain keys can be lit in; Space + U
+/// steps through them, even white first, then round the colour wheel, and
+/// after the last one comes the rainbow.
+const BASE_COLORS: [Rgb; RAINBOW as usize] = [
+    (12, 12, 12), // white
     (0, 10, 30),  // blue
     (0, 22, 22),  // cyan
     (0, 28, 0),   // green
@@ -169,8 +174,47 @@ const BASE_COLORS: [Rgb; rmk::key_light::BASE_COLORS as usize] = [
     (30, 0, 10),  // magenta
 ];
 
-/// Share of a colour that each brightness step lets through, in eighths.
-const BRIGHTNESS_EIGHTHS: [u16; rmk::key_light::BRIGHTNESS_MAX as usize + 1] = [1, 2, 3, 5, 8];
+/// The base look after the solid colours: a rainbow that sweeps across both
+/// halves, on every key of the base layer.
+const RAINBOW: u8 = rmk::key_light::BASE_COLORS - 1;
+/// Hue steps between neighbouring columns: one whole rainbow over the twelve.
+const RAINBOW_PER_COLUMN: u8 = 21;
+/// What a rainbow colour's channels add up to, in palette units.
+const RAINBOW_SUM: u16 = 32;
+
+/// What a palette colour is multiplied by at each brightness step, in 32nds.
+/// Step 4 sends the palette as written; the top step is 2.5 times that.
+const BRIGHTNESS_32NDS: [u16; rmk::key_light::BRIGHTNESS_MAX as usize + 1] = [5, 10, 16, 24, 32, 48, 64, 80];
+
+/// True when the base layer is showing the rainbow and so needs new frames.
+pub fn animated(light: LightSettings) -> bool {
+    light.base_on && light.base_color == RAINBOW
+}
+
+/// A fully saturated colour for `hue` (0..=255 once round the wheel).
+fn wheel(hue: u8) -> Rgb {
+    // 3 x 85 = 255: the one value left over would start a fourth segment.
+    let hue = if hue == 255 { 254 } else { hue };
+    let (segment, pos) = (hue / 85, (hue % 85) as u16);
+    let up = (pos * RAINBOW_SUM / 85) as u8;
+    let down = RAINBOW_SUM as u8 - up;
+    match segment {
+        0 => (down, up, 0),
+        1 => (0, down, up),
+        _ => (up, 0, down),
+    }
+}
+
+/// Column of a key across the whole keyboard, 0 (left edge) to 11.
+const fn column(key: usize) -> u8 {
+    match key {
+        48 => 4,
+        49 => 5,
+        50 => 6,
+        51 => 7,
+        _ => (key % 12) as u8,
+    }
+}
 
 const BASE_LAYER: usize = 0;
 const MEDIA_LAYER: usize = 3;
@@ -179,22 +223,29 @@ const KEY_BASE_TOGGLE: usize = 12 + 6;
 const KEY_BASE_COLOR: usize = 12 + 7;
 
 fn dimmed((r, g, b): Rgb, brightness: u8) -> Rgb {
-    let eighths = BRIGHTNESS_EIGHTHS[(brightness as usize).min(BRIGHTNESS_EIGHTHS.len() - 1)];
+    let step = BRIGHTNESS_32NDS[(brightness as usize).min(BRIGHTNESS_32NDS.len() - 1)];
     // A channel that is lit at all stays lit: rounding down to 0 would
     // change the hue at the dimmest steps.
-    let scale = |c: u8| if c == 0 { 0 } else { ((c as u16 * eighths) / 8).max(1) as u8 };
+    let scale = |c: u8| if c == 0 { 0 } else { ((c as u16 * step) / 32).clamp(1, 255) as u8 };
     (scale(r), scale(g), scale(b))
 }
 
 /// Colour of LED `led` (chain position) of `side` while `layer` is on top.
-pub fn color(side: Side, layer: u8, led: usize, light: LightSettings) -> Rgb {
+/// `phase` is where the rainbow has got to; it goes once round in 256.
+pub fn color(side: Side, layer: u8, led: usize, light: LightSettings, phase: u8) -> Rgb {
     let layer = (layer as usize).min(NUM_LAYERS - 1);
     let key = key_index(side, led);
-    let base_color = BASE_COLORS[light.base_color as usize % BASE_COLORS.len()];
+    let rainbow = light.base_color == RAINBOW;
+    let base_color = if rainbow {
+        // The colours travel left to right.
+        wheel(phase.wrapping_sub(column(key) * RAINBOW_PER_COLUMN))
+    } else {
+        BASE_COLORS[light.base_color as usize % BASE_COLORS.len()]
+    };
     let named = COLORS[layer][key];
     let rgb = match (layer, key) {
         (BASE_LAYER, _) if !light.base_on => ___,
-        (BASE_LAYER, _) if named == ___ => base_color,
+        (BASE_LAYER, _) if named == ___ || rainbow => base_color,
         // The two base-light keys show what they are set to.
         (MEDIA_LAYER, KEY_BASE_COLOR) => base_color,
         (MEDIA_LAYER, KEY_BASE_TOGGLE) if !light.base_on => FUN,
@@ -223,10 +274,7 @@ const _: () = {
         let mut key = 0;
         while key < NUM_KEYS {
             let (r, g, b) = COLORS[layer][key];
-            assert!(
-                r <= MAX_CHANNEL && g <= MAX_CHANNEL && b <= MAX_CHANNEL,
-                "colour brighter than MAX_CHANNEL"
-            );
+            assert!(r as u16 + g as u16 + b as u16 <= MAX_SUM, "colour brighter than MAX_SUM");
             key += 1;
         }
         layer += 1;

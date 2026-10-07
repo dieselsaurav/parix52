@@ -11,9 +11,10 @@ use core::sync::atomic::{AtomicU8, Ordering};
 use crate::event::{LightEvent, publish_event};
 
 /// Brightness steps: 0 (dimmest) to `BRIGHTNESS_MAX`.
-pub const BRIGHTNESS_MAX: u8 = 4;
-/// Colours the base layer cycles through; the board gives them their values.
-pub const BASE_COLORS: u8 = 8;
+pub const BRIGHTNESS_MAX: u8 = 7;
+/// Looks the base layer cycles through (colours and animations); the board
+/// gives them their meaning.
+pub const BASE_COLORS: u8 = 9;
 
 /// `User` key ids (keyboard.toml `User12`..`User15`).
 pub(crate) const KEY_BASE_TOGGLE: u8 = 12;
@@ -36,10 +37,10 @@ pub struct LightSettings {
 }
 
 impl LightSettings {
-    /// Base layer dark, full brightness, first colour.
+    /// Base layer dark, first colour, a brightness two steps under the top.
     pub const DEFAULT: Self = Self {
         base_on: false,
-        brightness: BRIGHTNESS_MAX,
+        brightness: BRIGHTNESS_MAX - 2,
         base_color: 0,
     };
 

@@ -120,8 +120,8 @@ All the controls are on the right hand while you hold **Space**, one subject per
 | 7 / 8 | Computer screen dimmer / brighter |
 | 9 / 0 | The keyboard's own screen dimmer / brighter (five subtle steps) |
 | Y | Base layer light on / off. It starts off. On, every key glows one colour so the legends read, and the six layer keys show the colour of the layer they open |
-| U | Next base colour: white, blue, cyan, green, yellow, orange, red, magenta |
-| O / P | All key lights dimmer / brighter (five steps) |
+| U | Next base look: white, blue, cyan, green, yellow, orange, red, magenta, then a rainbow that sweeps across both halves |
+| O / P | All key lights dimmer / brighter (eight steps). The top steps are bright and shorten battery life noticeably while the base light is on |
 | H | Everything dark, lights and screen, until you press it again |
 | J K L ' | Previous track, volume down, volume up, next track |
 | right thumbs | Play / pause, mute |

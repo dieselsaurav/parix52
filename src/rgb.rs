@@ -25,7 +25,7 @@ use embassy_nrf::gpio::{Level, Output, OutputDrive, Pin as GpioPin};
 use embassy_nrf::pwm::{
     Config, Instance, Prescaler, SequenceConfig, SequencePwm, SingleSequenceMode, SingleSequencer,
 };
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 use rmk::event::{LayerChangeEvent, LightEvent, SleepStateEvent};
 use rmk::key_light::{LightSettings, light_settings};
 use rmk::macros::processor;
@@ -47,7 +47,11 @@ const BUF_LEN: usize = NUM_LEDS * 24 + RESET_SLOTS;
 /// (ZMK's nice!nano ext-power uses the same 50 ms).
 const RAIL_SETTLE: Duration = Duration::from_millis(50);
 
-#[processor(subscribe = [LayerChangeEvent, SleepStateEvent, LightEvent])]
+/// How long the rainbow takes to go once round. A frame is drawn every
+/// 40 ms (`poll_interval` below).
+const RAINBOW_PERIOD_MS: u64 = 6000;
+
+#[processor(subscribe = [LayerChangeEvent, SleepStateEvent, LightEvent], poll_interval = 40)]
 pub struct RgbProcessor {
     pwm: SequencePwm<'static>,
     buf: [u16; BUF_LEN],
@@ -61,6 +65,10 @@ pub struct RgbProcessor {
     /// the layer changes (the layer key is let go). Otherwise the change
     /// could only be seen after releasing Space.
     preview: bool,
+    /// When the rainbow started. Each half keeps its own clock; both restart
+    /// it on the events they receive together (a light key, a wake-up), so
+    /// the sweep runs on across the gap between the halves.
+    anim_start: Instant,
     /// The keyboard is asleep: lights dark and the rail off.
     sleeping: bool,
     /// P0.13, high = the module's VCC output is on.
@@ -86,6 +94,7 @@ impl RgbProcessor {
             layer: 0,
             light: light_settings(),
             preview: false,
+            anim_start: Instant::now(),
             sleeping: false,
             rail: Output::new(rail, Level::High, OutputDrive::Standard),
         }
@@ -98,12 +107,13 @@ impl RgbProcessor {
         // delivered, and the next frame must not show stale settings.
         self.light = light_settings();
         let layer = if self.preview { 0 } else { self.layer };
+        let phase = (self.anim_start.elapsed().as_millis() % RAINBOW_PERIOD_MS * 256 / RAINBOW_PERIOD_MS) as u8;
         let mut i = 0;
         for led in 0..NUM_LEDS {
             let (r, g, b) = if self.sleeping {
                 (0, 0, 0)
             } else {
-                rgb_map::color(self.side, layer, led, self.light)
+                rgb_map::color(self.side, layer, led, self.light, phase)
             };
             for byte in [g, r, b] {
                 for bit in (0..8).rev() {
@@ -128,6 +138,16 @@ impl RgbProcessor {
         }
     }
 
+    /// The frame timer: only the rainbow, and only while it can be seen,
+    /// needs a new frame. (MEDIA is included for its colour key, which
+    /// shows the rainbow too.)
+    async fn poll(&mut self) {
+        let visible = self.preview || self.layer == 0 || self.layer == 3;
+        if !self.sleeping && visible && rgb_map::animated(light_settings()) {
+            self.show().await;
+        }
+    }
+
     async fn on_layer_change_event(&mut self, event: LayerChangeEvent) {
         if event.0 != self.layer || self.preview {
             self.layer = event.0;
@@ -141,6 +161,7 @@ impl RgbProcessor {
     async fn on_light_event(&mut self, event: LightEvent) {
         self.light = LightSettings::from_bits(event.0);
         self.preview = self.light.base_on;
+        self.anim_start = Instant::now();
         if !self.sleeping {
             self.show().await;
         }
@@ -165,6 +186,7 @@ impl RgbProcessor {
             self.rail.set_high();
             Timer::after(RAIL_SETTLE).await;
             self.sleeping = false;
+            self.anim_start = Instant::now();
             self.show().await;
         }
     }
