@@ -202,6 +202,14 @@ impl crate::KeyboardTomlConfig {
             event.subs += pointing_devices;
         }
 
+        // PARIX PATCH: this firmware's RGB processor (src/rgb.rs) watches key
+        // and pointer activity for its lights timeout; one slot each.
+        for name in ["keyboard", "pointing"] {
+            if let Some(event) = events.iter_mut().find(|event| event.name == name) {
+                event.subs += 1;
+            }
+        }
+
         // Every link subscribes to the outgoing queue, so a central needs one
         // slot per split peripheral on top of its link toward the dongle.
         if active_features.contains(&"custom_message")

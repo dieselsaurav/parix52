@@ -346,6 +346,12 @@ where
             return;
         }
 
+        // PARIX PATCH: asleep means the panel has no power (see
+        // on_sleep_state_event); keep the state dirty for the wake-up.
+        if self.ctx.sleeping {
+            self.pending_render = true;
+            return;
+        }
         // PARIX PATCH: the nRF I2C driver has no timeout, and this task
         // subscribes to key events. A transfer that never ends would fill
         // the key queue and stop the matrix. Bound every transfer, and leave
@@ -410,7 +416,20 @@ where
     }
 
     async fn on_sleep_state_event(&mut self, event: SleepStateEvent) {
+        // PARIX PATCH: the panel's supply is the module's switched VCC rail,
+        // which src/rgb.rs turns off while the keyboard sleeps. Nothing is
+        // drawn while asleep, and on waking the panel is a freshly powered
+        // one: wait for the rail and initialise it again.
+        let waking = self.ctx.sleeping && !event.0;
         self.ctx.sleeping = event.0;
+        if event.0 {
+            return;
+        }
+        if waking {
+            self.initialized = false;
+            self.io_failed_at = None;
+            Timer::after(Duration::from_millis(60)).await;
+        }
         self.render().await;
     }
 

@@ -206,6 +206,8 @@ pub struct Pinnacle<SPI: SpiBus, CS: OutputPin, DR: InputPin + Wait> {
     cursor_rem: (i32, i32),
     wheel_pending: i16,
     last_packet: Instant,
+    /// The keyboard is asleep and the pad's supply may be switched off.
+    powered_down: bool,
 }
 
 impl<SPI, CS, DR> Pinnacle<SPI, CS, DR>
@@ -228,6 +230,7 @@ where
             cursor_rem: (0, 0),
             wheel_pending: 0,
             last_packet: Instant::MIN,
+            powered_down: false,
         }
     }
 
@@ -457,6 +460,9 @@ where
     }
 
     async fn read_motion(&mut self) -> Result<MotionData, PointingDriverError> {
+        if self.powered_down {
+            return Ok(MotionData::default());
+        }
         // Without a DR pin `motion_pending` cannot tell, so ask the pad.
         // 0xFF is what a floating or unwired SO line reads as; it is not a
         // status, and acting on it would replay the pad's last packet forever.
@@ -508,9 +514,45 @@ where
         core::mem::take(&mut self.wheel_pending)
     }
 
+    /// The keyboard sleeps or wakes. On this board the pad hangs off the
+    /// module's switched VCC rail, which is turned off for the sleep, so:
+    /// going down, chip select is parked low and the pad is left alone (a
+    /// line held high would feed the dead rail through the pad's input
+    /// protection); coming up, the pad is a freshly powered one and gets its
+    /// whole configuration again. Harmless where the rail stays on: the pad
+    /// is simply reset and reconfigured on every wake.
+    async fn set_low_power(&mut self, enabled: bool) -> Result<(), PointingDriverError> {
+        if enabled {
+            self.powered_down = true;
+            let _ = self.cs.set_low();
+            return Ok(());
+        }
+        // Let the rail come up before talking to the pad.
+        Timer::after(Duration::from_millis(60)).await;
+        let _ = self.cs.set_high();
+        self.last_pos = None;
+        self.last_in_ring = false;
+        self.ring_acc = 0.0;
+        self.cursor_rem = (0, 0);
+        self.wheel_pending = 0;
+        let mut result = Err(PointingDriverError::InitFailed);
+        for _ in 0..3 {
+            result = self.configure().await;
+            if result.is_ok() {
+                break;
+            }
+            Timer::after(Duration::from_millis(50)).await;
+        }
+        self.powered_down = false;
+        result
+    }
+
     /// With DR: pending while the (inverted) pin reads low, i.e. DR is high.
     /// Without DR: always poll; `read_motion` checks SW_DR itself.
     fn motion_pending(&mut self) -> bool {
+        if self.powered_down {
+            return false;
+        }
         match &mut self.dr {
             Some(dr) => dr.is_low().unwrap_or(true),
             None => true,

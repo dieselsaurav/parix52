@@ -277,7 +277,10 @@ fn sleep_split_conn_params() -> RequestedConnParams {
         RequestedConnParams {
             min_connection_interval: Duration::from_millis(20),
             max_connection_interval: Duration::from_millis(20),
-            max_latency: 200, // 4s
+            // PARIX PATCH: 25, not 200. The right half's lights, trackpad and
+            // rail come back on a message from here, and at 200 it could
+            // ignore the central for 4 s after the first key on the left.
+            max_latency: 25, // 0.5 s
             supervision_timeout: Duration::from_secs(15),
             ..Default::default()
         }

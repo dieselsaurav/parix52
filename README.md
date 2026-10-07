@@ -98,9 +98,15 @@ you are on: letters warm white, digits green, modifiers yellow, editing keys pin
 layer keys in the colour of the layer they open, dark when the key does nothing. Hold a
 layer key and only its live keys stay lit.
 
-- **Space + Y** turns all lights and the screen off and on (the DISPOFF layer).
-- The lights go off by themselves after ten minutes without a keypress and come back on
-  the next one.
+- The lights go dark after **one minute** without a key, a pointer move or a layer
+  change on that half, and come back on the next one. (Each half watches its own keys,
+  so a half you are not using goes dark first.)
+- After **ten minutes** without any activity the keyboard sleeps: the lights' supply is
+  switched off completely, along with the screen and the trackpad, which is what makes
+  the battery last. **Press any key to wake it.** The trackpad cannot wake a sleeping
+  keyboard, because it has no power then; it responds again about a quarter of a second
+  after the key.
+- **Space + Y** turns all lights and the screen off and on by hand (the DISPOFF layer).
 
 The left half's screen shows the connection (USB or the Bluetooth profile number), the
 battery level and the layer in use. The right half has no screen; the trackpad sits
@@ -114,9 +120,10 @@ switch on the board. Charging is through the USB port of each half, at about 100
 off. The left half reports its level to the computer; the screen shows it too.
 
 The lights are most of the power budget: a half with its lights on draws around
-60–100 mA, and even dark the LED chips keep taking about 15 mA. Turn the lights off
-(Space + Y) when you want the battery to last, and use the slide switch when the
-keyboard is put away, which is the only true off.
+60–100 mA, and the LED chips keep taking about 15 mA even when dark, until the keyboard
+sleeps and switches their supply off. With the one-minute lights timeout and the
+ten-minute sleep, a day of normal use costs roughly 150–300 mAh per half. Use the slide
+switch when the keyboard is put away for long.
 
 ## Changing the keymap with Vial
 

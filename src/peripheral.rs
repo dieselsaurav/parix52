@@ -20,7 +20,7 @@ mod keyboard_peripheral {
     /// SK6812MINI-E chain on the right half (26 LEDs, data on P0.08).
     #[register_processor]
     fn rgb_underglow() -> RgbProcessor {
-        let mut rgb = RgbProcessor::new(p.PWM0, p.P0_08, Side::Right);
+        let mut rgb = RgbProcessor::new(p.PWM0, p.P0_08, p.P0_13, Side::Right);
         rgb.show().await; // paint the BASE colors at boot
         rgb
     }
