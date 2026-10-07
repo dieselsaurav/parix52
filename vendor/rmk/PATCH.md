@@ -44,7 +44,7 @@ A local key press now clears the peripheral's own sleep state.
 ## Cirque Pinnacle trackpad, wheel axis, automatic mouse layer
 
 `rmk/src/input_device/pinnacle.rs` (new), `rmk-macro/src/codegen/input_device/pinnacle.rs`
-(new), `rmk-config/src/lib.rs`, `rmk-config/src/resolved/hardware.rs`,
+(new), `rmk-config/src/lib.rs`, `rmk-config/src/resolved/{hardware.rs,build_constants.rs}`,
 `rmk-macro/src/codegen/{chip/bind_interrupt.rs,input_device/mod.rs,split/peripheral.rs}`,
 `rmk/src/input_device/{mod.rs,pointing.rs,pmw3610.rs,pmw33xx.rs}`.
 

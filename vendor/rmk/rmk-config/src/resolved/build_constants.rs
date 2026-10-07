@@ -77,7 +77,13 @@ impl crate::KeyboardTomlConfig {
     fn pointing_device_count(&self) -> usize {
         fn count(input_device: Option<&crate::InputDeviceConfig>) -> usize {
             input_device
-                .map(|d| d.pmw3610.as_ref().map_or(0, |v| v.len()) + d.pmw33xx.as_ref().map_or(0, |v| v.len()))
+                // PARIX PATCH: a Pinnacle pad is a PointingDevice too and
+                // needs its sleep-state subscriber slot like the others.
+                .map(|d| {
+                    d.pmw3610.as_ref().map_or(0, |v| v.len())
+                        + d.pmw33xx.as_ref().map_or(0, |v| v.len())
+                        + d.pinnacle.as_ref().map_or(0, |v| v.len())
+                })
                 .unwrap_or(0)
         }
         let boards = self.split.iter().flat_map(|split| {
