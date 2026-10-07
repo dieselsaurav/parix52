@@ -115,16 +115,19 @@ def labels(token: str, layer_names: list[str]) -> tuple[str, str | None]:
 
 def load(toml_path: Path) -> tuple[list[dict], list[dict], list[str]]:
     data = tomllib.loads(toml_path.read_text())
-    names = [l["name"] for l in data["layer"]]
+    # RMK 0.9 moved the layers under [keymap] and renamed matrix_map to map;
+    # the older shape is still read so the script works on either.
+    raw_layers = data.get("keymap", {}).get("layer") or data["layer"]
+    names = [l["name"] for l in raw_layers]
     layers = []
-    for layer in data["layer"]:
+    for layer in raw_layers:
         tokens = tokenize(layer["keys"])
         if len(tokens) != KEYS:
             sys.exit(f"layer {layer['name']}: {len(tokens)} keys, expected {KEYS}")
         layers.append({"name": layer["name"], "tokens": tokens,
                        "keys": [labels(t, names) for t in tokens]})
     matrix = [tuple(int(n) for n in re.findall(r"\d+", t))
-              for t in tokenize(data["layout"]["matrix_map"])]
+              for t in tokenize(data["layout"].get("map") or data["layout"]["matrix_map"])]
     combos = data.get("behavior", {}).get("combo", {}).get("combos", [])
     return layers, combos, [f"{r},{c}" for r, c in matrix]
 
