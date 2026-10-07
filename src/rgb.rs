@@ -12,8 +12,6 @@
 //! Behavior:
 //!   - a colour per key for the active layer, from `rgb_map` (dim palette,
 //!     battery first)
-//!   - lights dark after `LIGHTS_IDLE` without a key, a pointer move or a
-//!     layer change on this half; the next one brings them back
 //!   - when the keyboard sleeps (RMK's idle sleep, `keyboard.toml`), the
 //!     module's VCC output is switched off at P0.13, the way ZMK's ext_power
 //!     does it. Every SK6812 draws 0.5-1 mA dark, about 15 mA a half, and
@@ -26,10 +24,9 @@ use embassy_nrf::gpio::{Level, Output, OutputDrive, Pin as GpioPin};
 use embassy_nrf::pwm::{
     Config, Instance, Prescaler, SequenceConfig, SequencePwm, SingleSequenceMode, SingleSequencer,
 };
-use embassy_time::{Duration, Instant, Timer};
-use rmk::event::{KeyboardEvent, LayerChangeEvent, PointingEvent, SleepStateEvent};
+use embassy_time::{Duration, Timer};
+use rmk::event::{LayerChangeEvent, SleepStateEvent};
 use rmk::macros::processor;
-use rmk::processor::DeadlineProcessor;
 
 use crate::rgb_map::{self, NUM_LEDS, Side};
 
@@ -44,15 +41,13 @@ const DUTY_ONE: u16 = 0x8000 | 12;
 const RESET_SLOTS: usize = 64; // 80 us at 1.25 us/slot, the SK6812 minimum
 const BUF_LEN: usize = NUM_LEDS * 24 + RESET_SLOTS;
 
-/// Lights go dark this long after the last activity seen by this half.
-const LIGHTS_IDLE: Duration = Duration::from_secs(60);
 /// Time the switched rail needs to come up before the LEDs take a frame
 /// (ZMK's nice!nano ext-power uses the same 50 ms).
 const RAIL_SETTLE: Duration = Duration::from_millis(50);
 /// Wait between hearing the wake-up and switching the rail on.
 const RAIL_ON_DELAY: Duration = Duration::from_millis(10);
 
-#[processor(subscribe = [LayerChangeEvent, SleepStateEvent, KeyboardEvent, PointingEvent], deadline)]
+#[processor(subscribe = [LayerChangeEvent, SleepStateEvent])]
 pub struct RgbProcessor {
     pwm: SequencePwm<'static>,
     buf: [u16; BUF_LEN],
@@ -60,10 +55,6 @@ pub struct RgbProcessor {
     layer: u8,
     /// The keyboard is asleep: lights dark and the rail off.
     sleeping: bool,
-    /// No activity for `LIGHTS_IDLE`: lights dark, rail still on.
-    idle: bool,
-    /// When the lights go idle if nothing happens before.
-    lights_off_at: Option<Instant>,
     /// P0.13, high = the module's VCC output is on.
     rail: Output<'static>,
 }
@@ -86,22 +77,7 @@ impl RgbProcessor {
             side,
             layer: 0,
             sleeping: false,
-            idle: false,
-            lights_off_at: Some(Instant::now() + LIGHTS_IDLE),
             rail: Output::new(rail, Level::High, OutputDrive::Standard),
-        }
-    }
-
-    /// Something happened on this half: keep the lights on for another
-    /// `LIGHTS_IDLE`, and bring them back if they had gone idle.
-    async fn activity(&mut self) {
-        if self.sleeping {
-            return; // the wake-up comes as a SleepStateEvent
-        }
-        self.lights_off_at = Some(Instant::now() + LIGHTS_IDLE);
-        if self.idle {
-            self.idle = false;
-            self.show().await;
         }
     }
 
@@ -109,7 +85,7 @@ impl RgbProcessor {
     fn fill_buffer(&mut self) {
         let mut i = 0;
         for led in 0..NUM_LEDS {
-            let (r, g, b) = if self.sleeping || self.idle {
+            let (r, g, b) = if self.sleeping {
                 (0, 0, 0)
             } else {
                 rgb_map::color(self.side, self.layer, led)
@@ -140,24 +116,17 @@ impl RgbProcessor {
     async fn on_layer_change_event(&mut self, event: LayerChangeEvent) {
         if event.0 != self.layer {
             self.layer = event.0;
-            self.idle = false;
-            self.lights_off_at = Some(Instant::now() + LIGHTS_IDLE);
             if !self.sleeping {
                 self.show().await;
             }
         }
     }
 
-    async fn on_keyboard_event(&mut self, event: KeyboardEvent) {
-        if event.pressed {
-            self.activity().await;
-        }
-    }
-
-    async fn on_pointing_event(&mut self, _event: PointingEvent) {
-        self.activity().await;
-    }
-
+    /// The lights follow the keyboard's sleep state, which is one state for
+    /// both halves: the central decides it and tells the right half, so a
+    /// key on either half lights both. (A lights timer of its own per half
+    /// was tried and removed: a half that saw no keys went dark while the
+    /// other was in use, and nothing told it to come back.)
     async fn on_sleep_state_event(&mut self, event: SleepStateEvent) {
         if event.0 == self.sleeping {
             return;
@@ -166,7 +135,6 @@ impl RgbProcessor {
             // Dark frame first, then the supply: the data line idles low, so
             // nothing back-feeds the chain once the rail is gone.
             self.sleeping = true;
-            self.lights_off_at = None;
             self.show().await;
             self.rail.set_low();
         } else {
@@ -178,22 +146,6 @@ impl RgbProcessor {
             self.rail.set_high();
             Timer::after(RAIL_SETTLE).await;
             self.sleeping = false;
-            self.idle = false;
-            self.lights_off_at = Some(Instant::now() + LIGHTS_IDLE);
-            self.show().await;
-        }
-    }
-}
-
-impl DeadlineProcessor for RgbProcessor {
-    fn deadline(&self) -> Option<Instant> {
-        self.lights_off_at
-    }
-
-    async fn on_deadline(&mut self) {
-        self.lights_off_at = None;
-        if !self.sleeping && !self.idle {
-            self.idle = true;
             self.show().await;
         }
     }

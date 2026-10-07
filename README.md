@@ -105,8 +105,6 @@ layer key and only its live keys stay lit.
   completely, which is what makes the battery last. **Press any key on either half to
   wake it.** The trackpad cannot wake a sleeping keyboard, because it has no power then;
   it responds again about a quarter of a second after the key.
-- A half you are not using goes dark after a minute even while the other is in use; its
-  trackpad keeps working, and a key or a touch on it brings its lights back.
 - **Space + Y** turns all lights and the screen off and on by hand (the DISPOFF layer).
 
 The left half's screen shows the connection (USB or the Bluetooth profile number), the

@@ -58,7 +58,7 @@ pointer can never delay a key release.
 ## Switched VCC rail while asleep
 
 `rmk/src/display/mod.rs`, `rmk/src/input_device/pinnacle.rs`,
-`rmk/src/split/ble/central.rs`, `rmk-config/src/resolved/build_constants.rs`.
+`rmk/src/split/ble/central.rs`.
 
 `src/rgb.rs` turns the module's VCC output off (P0.13) while the keyboard
 sleeps, which is the only way to stop the LEDs' standby current. The OLED and
@@ -66,8 +66,7 @@ the trackpad share that rail: the display draws nothing while asleep and
 initialises the panel again on waking; the Pinnacle driver parks chip select
 low for the sleep and reconfigures the pad on waking. The split link's
 peripheral latency while asleep is 25 (0.5 s) instead of 200 (4 s) so the
-right half hears the wake-up promptly. Two event subscriber slots are added
-for the RGB processor's key and pointer subscriptions.
+right half hears the wake-up promptly.
 
 ## Dropped since the first base (b982049)
 
