@@ -12,9 +12,10 @@ use rmk::display::{DisplayRenderer, RenderContext};
 use rmk::heapless::String;
 use rmk::types::battery::{BatteryStatus, ChargeState};
 use rmk::types::ble::BleState;
+use rmk::types::connection::ConnectionType;
 
 use crate::layer_names::{DISPLAY_OFF_LAYER, LAYER_NAMES};
-use crate::status_view::{Output, View, draw};
+use crate::status_view::{Active, Bt, View, draw};
 
 /// True while USB power (VBUS) is present on this half.
 fn usb_powered() -> bool {
@@ -57,12 +58,15 @@ impl DisplayRenderer<BinaryColor> for StatusRenderer {
             }
         };
 
-        let profile = ctx.ble_status.profile;
-        let output = match ctx.ble_status.state {
-            BleState::Inactive => Output::Usb,
-            BleState::Connected => Output::BtOn(profile),
-            BleState::Advertising if ctx.ble_status.bonded => Output::BtSearching(profile),
-            BleState::Advertising => Output::BtPair(profile),
+        let bt = match ctx.ble_status.state {
+            BleState::Connected => Bt::On,
+            _ if ctx.ble_status.bonded => Bt::Searching,
+            _ => Bt::Unpaired,
+        };
+        let active = match ctx.active_output {
+            Some(ConnectionType::Usb) => Active::Usb,
+            Some(ConnectionType::Ble) => Active::Bluetooth,
+            None => Active::Nowhere,
         };
 
         let m = ctx.modifiers;
@@ -70,7 +74,10 @@ impl DisplayRenderer<BinaryColor> for StatusRenderer {
             display,
             &View {
                 layer,
-                output,
+                usb: ctx.usb_connected,
+                profile: ctx.ble_status.profile,
+                bt,
+                active,
                 left: percent(&ctx.battery),
                 right: ctx.peripheral_batteries.first().and_then(|b| percent(b)),
                 right_linked: ctx.peripherals_connected.first().copied().unwrap_or(false),

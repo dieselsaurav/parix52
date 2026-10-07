@@ -123,6 +123,14 @@ pub struct RenderContext {
     /// Current BLE status (active profile, connection state, and bond presence).
     #[cfg(feature = "_ble")]
     pub ble_status: BleStatus,
+    /// PARIX PATCH: the transport reports are going out on right now, which
+    /// is not the same as "Bluetooth is connected": with both links up it is
+    /// whichever is preferred. `None` while neither is ready.
+    #[cfg(feature = "_ble")]
+    pub active_output: Option<rmk_types::connection::ConnectionType>,
+    /// PARIX PATCH: a computer has configured the USB port.
+    #[cfg(feature = "_ble")]
+    pub usb_connected: bool,
     /// Whether the central is connected (only meaningful on peripherals).
     #[cfg(feature = "split")]
     pub central_connected: bool,
@@ -157,6 +165,10 @@ impl Default for RenderContext {
             sleeping: false,
             #[cfg(feature = "_ble")]
             ble_status: BleStatus::default(),
+            #[cfg(feature = "_ble")]
+            active_output: None,
+            #[cfg(feature = "_ble")]
+            usb_connected: false,
             #[cfg(feature = "split")]
             central_connected: false,
             #[cfg(feature = "split")]
@@ -436,6 +448,8 @@ where
     #[cfg(feature = "_ble")]
     async fn on_connection_status_change_event(&mut self, event: ConnectionStatusChangeEvent) {
         self.ctx.ble_status = event.0.ble;
+        self.ctx.active_output = event.0.decide_active();
+        self.ctx.usb_connected = event.0.usb == rmk_types::connection::UsbState::Configured;
         self.render().await;
     }
 
@@ -482,6 +496,9 @@ where
         #[cfg(feature = "_ble")]
         {
             self.ctx.ble_status = crate::state::current_ble_status();
+            let status = crate::state::current_connection_status();
+            self.ctx.active_output = status.decide_active();
+            self.ctx.usb_connected = status.usb == rmk_types::connection::UsbState::Configured;
         }
 
         self.pending_render = true;

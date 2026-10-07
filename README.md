@@ -118,7 +118,7 @@ The left half has a small screen (the right has the trackpad in its place):
 | Where | What |
 |---|---|
 | Top left | The layer in use |
-| Top right | Where your typing goes: `USB`, or `BT` and the profile number (1–4) with its state. `on` = connected. `..` = paired, looking for its computer. `pair` = nothing paired on this profile, open for pairing |
+| Top right | The links to your computer: `USB` when one is plugged in, and `BT` with the profile number (1–4). **The one in the filled box is where your typing is going.** `BT2` alone = connected; `BT2..` = paired, looking for its computer; `BT2?` = nothing paired on this profile, open for pairing. Space + N switches between the two when both are connected |
 | Bottom left | The modifiers held right now, as their Mac symbols (⌘ ⌥ ⌃ ⇧), and a boxed **A** while Caps Lock is on |
 | Bottom right | Both batteries, left then right, with a bar under each. A bolt replaces the letter while that half is plugged in and charging; `--` means the right half is not linked |
 

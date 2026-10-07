@@ -2,15 +2,16 @@
 //! can be rendered on a computer too (128 x 32, landscape):
 //!
 //! ```text
-//!   NAV                      BT2 on
+//!   NAV                   USB [BT2]
 //!   [mods] [A]          L 87%  R 64%
 //!                       ======  ====
 //! ```
 //!
 //!   top-left      layer name, large
-//!   top-right     where typing goes: `USB`, or `BT` and the profile number
-//!                 with its state: `on` connected, `..` paired and looking
-//!                 for its computer, `pair` nothing paired on this profile
+//!   top-right     the links to the computer, `USB` when one is plugged in
+//!                 and `BT` with the profile number: plain when connected,
+//!                 `..` paired and looking for its computer, `?` nothing
+//!                 paired. The one in the filled box is where typing goes.
 //!   bottom-left   the modifiers held now, as their Mac symbols in home-row
 //!                 order (Cmd Opt Ctrl Shift), and a boxed A for Caps Lock
 //!   bottom-right  both batteries, left then right, each with a bar under it;
@@ -26,22 +27,35 @@ use heapless::String;
 use u8g2_fonts::types::{FontColor, HorizontalAlignment, VerticalPosition};
 use u8g2_fonts::{FontRenderer, fonts};
 
-/// Where the keystrokes go.
+/// The Bluetooth profile in use and how it stands.
 #[derive(Clone, Copy, PartialEq)]
-pub enum Output {
+pub enum Bt {
+    /// Connected to its computer.
+    On,
+    /// Paired, not connected: looking for its computer.
+    Searching,
+    /// Nothing paired on this profile: open for pairing.
+    Unpaired,
+}
+
+/// Where the keystrokes are going right now.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Active {
     Usb,
-    /// Bluetooth profile, connected.
-    BtOn(u8),
-    /// Bluetooth profile, paired, not connected.
-    BtSearching(u8),
-    /// Bluetooth profile with nothing paired: open for pairing.
-    BtPair(u8),
+    Bluetooth,
+    /// Nowhere: no computer on USB and the profile is not connected.
+    Nowhere,
 }
 
 /// Everything the screen shows.
 pub struct View<'a> {
     pub layer: &'a str,
-    pub output: Output,
+    /// A computer is connected over USB.
+    pub usb: bool,
+    /// Bluetooth profile number, 0-based, and its state.
+    pub profile: u8,
+    pub bt: Bt,
+    pub active: Active,
     /// Left battery, percent.
     pub left: Option<u8>,
     /// Right battery, percent; `None` when unknown.
@@ -145,6 +159,25 @@ fn battery<D: DrawTarget<Color = BinaryColor>>(d: &mut D, right: i32, label: cha
     }
 }
 
+/// A word on the top line with its left edge at `x`; `active` draws it
+/// dark on a filled box.
+fn tag<D: DrawTarget<Color = BinaryColor>>(d: &mut D, x: i32, text: &str, active: bool) {
+    let small = FontRenderer::new::<fonts::u8g2_font_6x12_tr>();
+    let w = text.len() as u32 * 6;
+    let color = if active {
+        Rectangle::new(Point::new(x - 2, 0), Size::new(w + 3, 13))
+            .into_styled(PrimitiveStyle::with_fill(ON))
+            .draw(d)
+            .ok();
+        FontColor::Transparent(BinaryColor::Off)
+    } else {
+        FontColor::Transparent(ON)
+    };
+    small
+        .render_aligned(text, Point::new(x, 1), VerticalPosition::Top, HorizontalAlignment::Left, color, d)
+        .ok();
+}
+
 pub fn draw<D: DrawTarget<Color = BinaryColor>>(d: &mut D, v: &View) {
     let small = FontRenderer::new::<fonts::u8g2_font_6x12_tr>();
     let big = FontRenderer::new::<fonts::u8g2_font_logisoso16_tr>();
@@ -154,25 +187,20 @@ pub fn draw<D: DrawTarget<Color = BinaryColor>>(d: &mut D, v: &View) {
     big.render_aligned(v.layer, Point::new(0, 0), VerticalPosition::Top, HorizontalAlignment::Left, on, d)
         .ok();
 
-    // Top-right: output and its state.
-    let mut out: String<10> = String::new();
-    match v.output {
-        Output::Usb => {
-            let _ = write!(out, "USB");
-        }
-        Output::BtOn(p) => {
-            let _ = write!(out, "BT{} on", p + 1);
-        }
-        Output::BtSearching(p) => {
-            let _ = write!(out, "BT{} ..", p + 1);
-        }
-        Output::BtPair(p) => {
-            let _ = write!(out, "BT{} pair", p + 1);
-        }
+    // Top-right: the links, and which one the typing is on. Both are named
+    // when both exist; the one in the filled box carries the keystrokes.
+    let mut bt: String<8> = String::new();
+    let _ = match v.bt {
+        Bt::On => write!(bt, "BT{}", v.profile + 1),
+        Bt::Searching => write!(bt, "BT{}..", v.profile + 1),
+        Bt::Unpaired => write!(bt, "BT{}?", v.profile + 1),
+    };
+    let bt_w = bt.len() as i32 * 6;
+    let bt_x = 126 - bt_w;
+    tag(d, bt_x, bt.as_str(), v.active == Active::Bluetooth);
+    if v.usb {
+        tag(d, bt_x - 6 - 18, "USB", v.active == Active::Usb);
     }
-    small
-        .render_aligned(out.as_str(), Point::new(127, 2), VerticalPosition::Top, HorizontalAlignment::Right, on, d)
-        .ok();
 
     // Bottom-left: held modifiers in home-row order, then Caps Lock.
     if v.cmd {

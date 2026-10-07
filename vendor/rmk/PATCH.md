@@ -68,6 +68,15 @@ low for the sleep and reconfigures the pad on waking. The split link's
 peripheral latency while asleep is 25 (0.5 s) instead of 200 (4 s) so the
 right half hears the wake-up promptly.
 
+## The screen is told the real output
+
+`rmk/src/display/mod.rs`.
+
+`RenderContext` gains `active_output` (the transport reports are going out
+on, from `ConnectionStatus::decide_active`) and `usb_connected`. Upstream
+passes only the Bluetooth status, and "Bluetooth connected" is not "typing
+goes over Bluetooth" when a USB cable is in as well.
+
 ## Battery level
 
 `rmk/src/input_device/battery.rs`.
