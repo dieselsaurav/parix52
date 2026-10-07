@@ -10,7 +10,7 @@ use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::prelude::*;
 use rmk::display::{DisplayRenderer, RenderContext};
 use rmk::heapless::String;
-use rmk::types::battery::BatteryStatus;
+use rmk::types::battery::{BatteryStatus, ChargeState};
 use rmk::types::ble::BleState;
 
 use crate::layer_names::{DISPLAY_OFF_LAYER, LAYER_NAMES};
@@ -26,6 +26,16 @@ fn percent(status: &BatteryStatus) -> Option<u8> {
         BatteryStatus::Available { level, .. } => *level,
         BatteryStatus::Unavailable => None,
     }
+}
+
+fn charging(status: &BatteryStatus) -> bool {
+    matches!(
+        status,
+        BatteryStatus::Available {
+            charge_state: ChargeState::Charging,
+            ..
+        }
+    )
 }
 
 #[derive(Default)]
@@ -64,7 +74,9 @@ impl DisplayRenderer<BinaryColor> for StatusRenderer {
                 left: percent(&ctx.battery),
                 right: ctx.peripheral_batteries.first().and_then(|b| percent(b)),
                 right_linked: ctx.peripherals_connected.first().copied().unwrap_or(false),
-                usb_power: usb_powered(),
+                // The left knows at once; the right says so with its battery level.
+                left_charging: usb_powered() || charging(&ctx.battery),
+                right_charging: ctx.peripheral_batteries.first().is_some_and(|b| charging(b)),
                 cmd: m.left_gui() || m.right_gui(),
                 opt: m.left_alt() || m.right_alt(),
                 ctrl: m.left_ctrl() || m.right_ctrl(),

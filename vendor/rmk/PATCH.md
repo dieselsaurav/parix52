@@ -68,6 +68,18 @@ low for the sleep and reconfigures the pad on waking. The split link's
 peripheral latency while asleep is 25 (0.5 s) instead of 200 (4 s) so the
 right half hears the wake-up promptly.
 
+## Battery level
+
+`rmk/src/input_device/battery.rs`.
+
+The level is read along a lithium-polymer discharge curve instead of a
+straight line from 3.56 V to 4.18 V (which over-reads below a third and then
+falls off a cliff, and under-reads by five to eight points above half), from
+a voltage smoothed over about sixteen samples, since the lights sag the rail
+while lit. It keeps updating while charging, where upstream froze it, and the
+charge state comes from the chip's VBUS detector, so no charge-state pin is
+needed: on USB power a half reports itself as charging.
+
 ## Dropped since the first base (b982049)
 
 Upstream now carries its own version of: the PHY/connection-parameter retry

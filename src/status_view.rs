@@ -14,8 +14,8 @@
 //!   bottom-left   the modifiers held now, as their Mac symbols in home-row
 //!                 order (Cmd Opt Ctrl Shift), and a boxed A for Caps Lock
 //!   bottom-right  both batteries, left then right, each with a bar under it;
-//!                 a bolt in place of the L while this half is on USB power,
-//!                 `--` for a right half that is not linked
+//!                 a bolt in place of the letter while that half is on USB
+//!                 power, `--` for a right half that is not linked
 
 use core::fmt::Write as _;
 
@@ -47,7 +47,9 @@ pub struct View<'a> {
     /// Right battery, percent; `None` when unknown.
     pub right: Option<u8>,
     pub right_linked: bool,
-    pub usb_power: bool,
+    /// Each half on USB power, i.e. charging: a bolt replaces its letter.
+    pub left_charging: bool,
+    pub right_charging: bool,
     pub cmd: bool,
     pub opt: bool,
     pub ctrl: bool,
@@ -193,6 +195,12 @@ pub fn draw<D: DrawTarget<Color = BinaryColor>>(d: &mut D, v: &View) {
     }
 
     // Bottom-right: batteries.
-    battery(d, 93, 'L', v.usb_power, v.left);
-    battery(d, 127, 'R', false, if v.right_linked { v.right } else { None });
+    battery(d, 93, 'L', v.left_charging, v.left);
+    battery(
+        d,
+        127,
+        'R',
+        v.right_linked && v.right_charging,
+        if v.right_linked { v.right } else { None },
+    );
 }

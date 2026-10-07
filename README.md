@@ -120,14 +120,19 @@ The left half has a small screen (the right has the trackpad in its place):
 | Top left | The layer in use |
 | Top right | Where your typing goes: `USB`, or `BT` and the profile number (1–4) with its state. `on` = connected. `..` = paired, looking for its computer. `pair` = nothing paired on this profile, open for pairing |
 | Bottom left | The modifiers held right now, as their Mac symbols (⌘ ⌥ ⌃ ⇧), and a boxed **A** while Caps Lock is on |
-| Bottom right | Both batteries, left then right, with a bar under each. A bolt replaces the **L** while the left half is on USB power; `--` means the right half is not linked |
+| Bottom right | Both batteries, left then right, with a bar under each. A bolt replaces the letter while that half is plugged in and charging; `--` means the right half is not linked |
 
 ## Battery
 
 Each half takes a 3.7 V lithium-polymer cell on a JST-PH plug, switched by the slide
 switch on the board. Charging is through the USB port of each half, at about 100 mA
 (roughly ten hours for a 1000 mAh cell); the charger works whether the switch is on or
-off. The left half reports its level to the computer; the screen shows it too.
+off. The left half reports its level to the computer; the screen shows both halves.
+
+The percentage is an estimate from the cell's voltage, read along a lithium-polymer
+discharge curve and smoothed over a few seconds. Expect it to be right to within about
+five to ten points; it reads a few points high while a half is charging (the bolt on
+the screen), and settles a few minutes after unplugging.
 
 The lights are most of the power budget: a half with its lights on draws around
 60–100 mA, and the LED chips keep taking about 15 mA even when dark, until the keyboard

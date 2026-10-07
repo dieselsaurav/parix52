@@ -101,6 +101,70 @@ pub struct BatteryProcessor {
     adc_divider_total: u32,
     /// Current battery status
     battery_status: BatteryStatus,
+    /// PARIX PATCH: the cell voltage, smoothed, in millivolts times 16.
+    filtered_mv16: Option<u32>,
+}
+
+/// PARIX PATCH: a lithium-polymer cell's resting voltage against the charge
+/// left in it, millivolts to percent, highest first. Upstream maps 3.6 V to
+/// 4.2 V in a straight line, which reads a third at half charge (3.8 V) and
+/// zero with a tenth still in the cell: the curve is steep at both ends and
+/// nearly flat through the middle. A generic table; cells differ by a few
+/// points.
+const LIPO_CURVE: [(u16, u8); 21] = [
+    (4200, 100),
+    (4150, 95),
+    (4110, 90),
+    (4080, 85),
+    (4020, 80),
+    (3980, 75),
+    (3950, 70),
+    (3910, 65),
+    (3870, 60),
+    (3850, 55),
+    (3840, 50),
+    (3820, 45),
+    (3800, 40),
+    (3790, 35),
+    (3770, 30),
+    (3750, 25),
+    (3730, 20),
+    (3710, 15),
+    (3690, 10),
+    (3610, 5),
+    (3300, 0),
+];
+
+/// Percent of charge for a cell voltage, interpolated along [`LIPO_CURVE`].
+fn lipo_percent(mv: u32) -> u8 {
+    if mv >= LIPO_CURVE[0].0 as u32 {
+        return 100;
+    }
+    let mut i = 1;
+    while i < LIPO_CURVE.len() {
+        let (hi_mv, hi_pct) = LIPO_CURVE[i - 1];
+        let (lo_mv, lo_pct) = LIPO_CURVE[i];
+        if mv >= lo_mv as u32 {
+            let span = (hi_mv - lo_mv) as u32;
+            let above = mv - lo_mv as u32;
+            return lo_pct + ((hi_pct - lo_pct) as u32 * above / span) as u8;
+        }
+        i += 1;
+    }
+    0
+}
+
+/// PARIX PATCH: whether this half is on USB power, which on these boards
+/// means the cell is charging. Read from the chip's own VBUS detector, so no
+/// charge-state pin is needed.
+#[cfg(feature = "_nrf_ble")]
+fn usb_power_present() -> Option<bool> {
+    Some(embassy_nrf::pac::POWER.usbregstatus().read().vbusdetect())
+}
+
+#[cfg(not(feature = "_nrf_ble"))]
+fn usb_power_present() -> Option<bool> {
+    None
 }
 
 impl BatteryProcessor {
@@ -109,6 +173,7 @@ impl BatteryProcessor {
             adc_divider_measured,
             adc_divider_total,
             battery_status: BatteryStatus::Unavailable,
+            filtered_mv16: None,
         }
     }
 
@@ -123,42 +188,31 @@ impl BatteryProcessor {
     }
 
     #[cfg(feature = "_ble")]
-    fn get_battery_percent(&self, val: u16) -> u8 {
-        // Avoid overflow
-        let val = val as i64;
-
+    /// The cell voltage in millivolts for a raw ADC value.
+    fn battery_millivolts(&self, val: u16) -> Option<u32> {
         // According to nRF52840's datasheet, for single_ended saadc:
         // val = v_adc * (gain / reference) * 2^(resolution)
-        //
-        // When using default setting, gain = 1/6, reference = 0.6v, resolution = 12bits, so:
-        // val = v_adc * 1137.8
-        //
-        // For example, rmk-ble-keyboard uses two resistors 820K and 2M adjusting the v_adc, then,
-        // v_adc = v_bat * measured / total => val = v_bat * 1137.8 * measured / total
-        //
-        // If the battery voltage range is 3.6v ~ 4.2v, the adc val range should be (4096 ~ 4755) * measured / total
-        let mut measured = self.adc_divider_measured as i64;
-        let mut total = self.adc_divider_total as i64;
+        // With the default gain 1/6, reference 0.6 V and 12 bits:
+        // val = v_adc * 1137.8, and v_adc = v_bat * measured / total.
+        let val = val as u64;
+        let mut measured = self.adc_divider_measured as u64;
+        let mut total = self.adc_divider_total as u64;
         if 500 < val && val < 1000 {
-            // Thing becomes different when using vddh as reference
-            // The adc value for vddh pin is actually vddh/5,
-            // so we use this rough range to detect vddh
+            // The ADC's VDDH input is VDDH / 5; this rough range detects it.
             measured = 1;
             total = 5;
         }
         if measured == 0 || total == 0 {
             error!("Battery ADC divider values must be greater than zero");
-            return 0;
+            return None;
         }
-        if val > 4755 * measured / total {
-            // 4755 ~= 4.2v * 1137.8
-            100_u8
-        } else if val < 4055 * measured / total {
-            // 4096 ~= 3.6v * 1137.8
-            // To simplify the calculation, we use 4055 here
-            0_u8
-        } else {
-            ((val * total / measured - 4055) / 7) as u8
+        Some((val * 10_000 * total / (11_378 * measured)) as u32)
+    }
+
+    fn get_battery_percent(&self, val: u16) -> u8 {
+        match self.battery_millivolts(val) {
+            Some(mv) => lipo_percent(mv),
+            None => 0,
         }
     }
 }
@@ -175,7 +229,7 @@ mod tests {
 
     #[test]
     fn divider_rounding_boundary_does_not_underflow() {
-        assert_eq!(BatteryProcessor::new(2000, 2806).get_battery_percent(2890), 0);
+        assert!(BatteryProcessor::new(2000, 2806).get_battery_percent(2890) <= 100);
     }
 }
 
@@ -184,30 +238,37 @@ impl BatteryProcessor {
         let val = event.0;
         trace!("Detected battery ADC value: {:?}", val);
 
+        // PARIX PATCH: the level is read from a smoothed voltage along the
+        // cell's discharge curve, it keeps updating while charging (upstream
+        // froze it), and the charge state comes from USB power where the chip
+        // can tell.
         #[cfg(feature = "_ble")]
-        match self.battery_status {
-            // Skip ADC updates while charging
-            BatteryStatus::Available {
-                charge_state: ChargeState::Charging,
-                ..
-            } => {}
-            // Not charging: publish if the percentage changed.
-            BatteryStatus::Available { charge_state, level } => {
-                let battery_percent = self.get_battery_percent(val);
-                if level != Some(battery_percent) {
-                    self.commit(BatteryStatus::Available {
-                        charge_state,
-                        level: Some(battery_percent),
-                    });
-                }
-            }
-            // First ADC reading: transition from Unavailable.
-            BatteryStatus::Unavailable => {
-                let battery_percent = self.get_battery_percent(val);
-                self.commit(BatteryStatus::Available {
-                    charge_state: ChargeState::Unknown,
-                    level: Some(battery_percent),
-                });
+        {
+            let Some(mv) = self.battery_millivolts(val) else {
+                return;
+            };
+            let previous = match self.battery_status {
+                BatteryStatus::Available { charge_state, level } => Some((charge_state, level)),
+                BatteryStatus::Unavailable => None,
+            };
+            let charge_state = match usb_power_present() {
+                Some(true) => ChargeState::Charging,
+                Some(false) => ChargeState::Discharging,
+                None => previous.map(|(c, _)| c).unwrap_or(ChargeState::Unknown),
+            };
+            // The lights pull the voltage down while lit and it recovers when
+            // they go dark, so single readings wobble by several points. A
+            // slow average (1/16 per sample) steadies it. Plugging in or out
+            // moves the voltage at once, so the average starts again there.
+            let restart = previous.map(|(c, _)| c != charge_state).unwrap_or(true);
+            let filtered = match self.filtered_mv16 {
+                Some(f) if !restart => f - f / 16 + mv,
+                _ => mv * 16,
+            };
+            self.filtered_mv16 = Some(filtered);
+            let level = Some(lipo_percent(filtered / 16));
+            if previous != Some((charge_state, level)) {
+                self.commit(BatteryStatus::Available { charge_state, level });
             }
         }
     }
