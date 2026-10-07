@@ -77,6 +77,15 @@ on, from `ConnectionStatus::decide_active`) and `usb_connected`. Upstream
 passes only the Bluetooth status, and "Bluetooth connected" is not "typing
 goes over Bluetooth" when a USB cable is in as well.
 
+## Panel brightness
+
+`rmk/src/display/mod.rs`, `rmk/src/display/drivers/ssd1306.rs`.
+
+`rmk::display::set_display_brightness(0..=4)`; the SSD1306 driver applies it
+on every init. Upstream has no brightness setting. The level is a constant in
+`src/status.rs`, not a keyboard.toml key, so changing it does not wipe the
+store.
+
 ## Battery level
 
 `rmk/src/input_device/battery.rs`.

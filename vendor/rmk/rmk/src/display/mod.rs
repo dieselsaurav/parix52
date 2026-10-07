@@ -102,6 +102,20 @@ use crate::processor::Processor;
 /// Third-party renderers that access these fields must enable the
 /// corresponding features in their `Cargo.toml` dependency on `rmk`,
 /// and guard access with matching `#[cfg]` attributes.
+/// PARIX PATCH: panel brightness, 0 (dimmest) to 4 (brightest); 2 is the
+/// SSD1306's own default. Set by the firmware before the display starts.
+static DISPLAY_BRIGHTNESS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(2);
+
+/// Choose the panel brightness, 0 (dimmest) to 4 (brightest). Takes effect
+/// the next time the panel is initialised: at start and after every sleep.
+pub fn set_display_brightness(level: u8) {
+    DISPLAY_BRIGHTNESS.store(level.min(4), core::sync::atomic::Ordering::Relaxed);
+}
+
+pub(crate) fn display_brightness() -> u8 {
+    DISPLAY_BRIGHTNESS.load(core::sync::atomic::Ordering::Relaxed)
+}
+
 /// PARIX PATCH: longest a display transfer may take, and how long a panel
 /// that timed out is left alone.
 const IO_TIMEOUT: Duration = Duration::from_millis(250);

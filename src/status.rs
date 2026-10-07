@@ -39,8 +39,21 @@ fn charging(status: &BatteryStatus) -> bool {
     )
 }
 
-#[derive(Default)]
+/// Panel brightness, 0 (dimmest) to 4 (brightest). The panel's own default
+/// is 2, which is glaring in a dim room. The range of these small OLEDs is
+/// narrow: 0 is "noticeably dimmer", not "faint".
+/// Changing it here needs only the left half reflashed, with no re-pairing.
+const OLED_BRIGHTNESS: u8 = 0;
+
 pub struct StatusRenderer;
+
+impl Default for StatusRenderer {
+    fn default() -> Self {
+        // The renderer is built before the panel is first initialised.
+        rmk::display::set_display_brightness(OLED_BRIGHTNESS);
+        Self
+    }
+}
 
 impl DisplayRenderer<BinaryColor> for StatusRenderer {
     fn render<D: DrawTarget<Color = BinaryColor>>(&mut self, ctx: &RenderContext, display: &mut D) {

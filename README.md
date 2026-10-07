@@ -122,6 +122,9 @@ The left half has a small screen (the right has the trackpad in its place):
 | Bottom left | The modifiers held right now, as their Mac symbols (⌘ ⌥ ⌃ ⇧), and a boxed **A** while Caps Lock is on |
 | Bottom right | Both batteries, left then right, with a bar under each. A bolt replaces the letter while that half is plugged in and charging; `--` means the right half is not linked |
 
+The screen runs at its dimmest setting. To change it, set `OLED_BRIGHTNESS` (0 dimmest to 4
+brightest) in `src/status.rs` and reflash the left half; pairings are kept.
+
 ## Battery
 
 Each half takes a 3.7 V lithium-polymer cell on a JST-PH plug, switched by the slide
