@@ -353,6 +353,13 @@ cursor_divisor = 3
 # click. Right click stays on the Backspace thumb while the pad is in use.
 tap = true
 tap_term_ms = 200
+# Cursor glide: lift the finger while it is still moving and the cursor
+# coasts to a stop; touching the pad stops it. Friction and trigger are
+# QMK's defaults (0.4 and 10); raise the friction for a shorter glide, raise
+# the trigger to need a faster flick.
+glide = true
+glide_friction = 40
+glide_trigger = 10
 proc_swap_xy = true
 proc_invert_x = false
 proc_invert_y = true

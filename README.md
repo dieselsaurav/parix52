@@ -79,6 +79,9 @@ The right half carries a 40 mm Cirque trackpad.
 - **Pointer:** touch and move anywhere on the pad.
 - **Click:** tap the pad (a touch shorter than a fifth of a second that stays where it
   landed) for a left click.
+- **Glide:** flick and lift while your finger is still moving, and the pointer coasts to a
+  stop, which covers a large screen in one stroke. Touch the pad to stop it. A slow move
+  ends where you end it.
 - **Scroll:** land on the **outer ring** (the outer fifth of the pad's radius, about
   4 mm) and run your finger around it, like a wheel. Clockwise scrolls down. A touch
   that lands on the ring and moves towards the middle instead is an ordinary pointer

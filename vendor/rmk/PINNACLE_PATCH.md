@@ -43,3 +43,11 @@ Decided once per touch, in `absolute_to_motion`:
   cursor move; anything more tangential makes it a scroll. The numbers are
   QMK's (`cirque_pinnacle_gestures.c`: trigger 16 of 128, 50 degrees); QMK's
   ring is a third of the radius, this one a fifth.
+- **Glide** (`glide`, `glide_friction`, `glide_trigger`): if a cursor move ends
+  with the finger still moving faster than the trigger, the driver keeps
+  producing motion after the lift, decelerating at a constant rate
+  (`p = v0 t - friction t^2 / 2`, one step per 10 ms), as QMK's cursor glide
+  does, with QMK's defaults (friction 0.4, trigger 10). The starting velocity
+  is the cursor speed smoothed over the last packets. While a glide runs the
+  device is polled on the timer instead of waiting for the data-ready pin; a
+  new touch ends it.

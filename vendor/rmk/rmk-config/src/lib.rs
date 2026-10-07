@@ -1410,6 +1410,16 @@ pub struct PinnacleConfig {
     /// Longest touch that still counts as a tap, in milliseconds. Default 200.
     #[serde(default = "default_tap_term_ms")]
     pub tap_term_ms: u16,
+    /// Cursor glide: the cursor coasts to a stop after a flick. Needs
+    /// `scroll_ring` (absolute mode).
+    #[serde(default)]
+    pub glide: bool,
+    /// How quickly a glide slows; higher stops sooner. Default 40 (QMK's 0.4).
+    #[serde(default = "default_glide_friction")]
+    pub glide_friction: u8,
+    /// Lift-off speed below which there is no glide. Default 10.
+    #[serde(default = "default_glide_trigger")]
+    pub glide_trigger: u8,
     /// Report rate (Hz). Motion is accumulated and emitted at this rate.
     #[serde(default = "default_pointing_report_hz")]
     pub report_hz: u16,
@@ -1447,6 +1457,14 @@ const fn default_cursor_divisor() -> u8 {
 
 const fn default_tap_term_ms() -> u16 {
     200
+}
+
+const fn default_glide_friction() -> u8 {
+    40
+}
+
+const fn default_glide_trigger() -> u8 {
+    10
 }
 
 /// Azoteq IQS5xx trackpad configuration.

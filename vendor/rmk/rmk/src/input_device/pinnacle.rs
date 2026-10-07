@@ -123,6 +123,14 @@ pub struct PinnacleConfig {
     pub tap: bool,
     /// Longest touch that still counts as a tap, in milliseconds.
     pub tap_term_ms: u16,
+    /// Cursor glide: a finger lifted while still moving leaves the cursor
+    /// coasting to a stop; touching the pad again stops it at once.
+    pub glide: bool,
+    /// How quickly a glide slows, in hundredths of a count per 10 ms tick,
+    /// per tick. QMK's default is 0.4, here 40. Higher stops sooner.
+    pub glide_friction: u8,
+    /// Speed at lift-off below which there is no glide, in counts per 10 ms.
+    pub glide_trigger: u8,
 }
 
 impl Default for PinnacleConfig {
@@ -139,6 +147,9 @@ impl Default for PinnacleConfig {
             cursor_divisor: 3,
             tap: false,
             tap_term_ms: 200,
+            glide: false,
+            glide_friction: 40,
+            glide_trigger: 10,
         }
     }
 }
@@ -166,6 +177,41 @@ const RING_RADIAL_COS2: f32 = 0.4132;
 /// A tap may wander this far from where it landed, in pad units (about
 /// 45 to the millimetre).
 const TAP_MAX_TRAVEL: i32 = 70;
+
+/// A glide in progress: constant deceleration from the speed at lift-off,
+/// as in QMK's cursor glide (`p = v0 t - friction t^2 / 2`), one step per
+/// [`GLIDE_TICK`].
+#[derive(Clone, Copy)]
+struct Glide {
+    /// Direction, as the unit vector of the lift-off velocity.
+    ux: f32,
+    uy: f32,
+    /// Speed at lift-off, counts per tick.
+    v0: f32,
+    /// Ticks elapsed.
+    t: u32,
+    /// Distance already reported along each axis, in whole counts.
+    sent: (i32, i32),
+    next: Instant,
+}
+
+const GLIDE_TICK: Duration = Duration::from_millis(10);
+/// A lift counts as "still moving" only if the last cursor packet is this recent.
+const GLIDE_FRESH: Duration = Duration::from_millis(40);
+
+/// Square root without libm (Newton's method; inputs here are small).
+fn sqrt_f32(v: f32) -> f32 {
+    if v <= 0.0 {
+        return 0.0;
+    }
+    let mut x = if v > 1.0 { v } else { 1.0 };
+    let mut i = 0;
+    while i < 12 {
+        x = 0.5 * (x + v / x);
+        i += 1;
+    }
+    x
+}
 
 /// Angle of (x, y) in degrees, 0..360, atan2 without libm: an octant-folded
 /// polynomial, within 0.3 degrees, more than enough for a scroll ring.
@@ -298,6 +344,11 @@ pub struct Pinnacle<SPI: SpiBus, CS: ChipSelect, DR: InputPin + Wait> {
     touch_moved: bool,
     /// Buttons to click, set at the lift-off of a tap.
     click_pending: u8,
+    /// Smoothed cursor speed of the touch in progress, counts per packet,
+    /// and when it was last updated: the glide's starting velocity.
+    speed: (f32, f32),
+    speed_at: Instant,
+    glide: Option<Glide>,
     last_angle: f32,
     ring_acc: f32,
     cursor_rem: (i32, i32),
@@ -330,6 +381,9 @@ where
             touch_started: Instant::MIN,
             touch_moved: false,
             click_pending: 0,
+            speed: (0.0, 0.0),
+            speed_at: Instant::MIN,
+            glide: None,
             last_angle: 0.0,
             ring_acc: 0.0,
             cursor_rem: (0, 0),
@@ -376,10 +430,56 @@ where
         {
             self.click_pending |= 0x01;
         }
+        if self.config.glide
+            && self.gesture == Gesture::Cursor
+            && self.touch_moved
+            && now.saturating_duration_since(self.speed_at) <= GLIDE_FRESH
+        {
+            let (vx, vy) = self.speed;
+            let v0 = sqrt_f32(vx * vx + vy * vy);
+            if v0 >= self.config.glide_trigger as f32 {
+                self.glide = Some(Glide {
+                    ux: vx / v0,
+                    uy: vy / v0,
+                    v0,
+                    t: 0,
+                    sent: (0, 0),
+                    next: now + GLIDE_TICK,
+                });
+            }
+        }
         self.gesture = Gesture::None;
         self.last_pos = None;
         self.ring_acc = 0.0;
         self.cursor_rem = (0, 0);
+    }
+
+    /// The next step of a glide, if one is due.
+    fn glide_step(&mut self, now: Instant) -> MotionData {
+        let Some(mut g) = self.glide else {
+            return MotionData::default();
+        };
+        if now < g.next {
+            return MotionData::default();
+        }
+        g.next = now + GLIDE_TICK;
+        g.t += 1;
+        let t = g.t as f32;
+        let friction = self.config.glide_friction.max(1) as f32 / 100.0;
+        if g.v0 - friction * t <= 0.0 {
+            self.glide = None;
+            return MotionData::default();
+        }
+        let p = g.v0 * t - friction * t * t / 2.0;
+        let (x, y) = ((p * g.ux) as i32, (p * g.uy) as i32);
+        let (dx, dy) = (x - g.sent.0, y - g.sent.1);
+        g.sent = (x, y);
+        // Slow enough to be invisible: stop rather than creep.
+        self.glide = if dx.abs() <= 1 && dy.abs() <= 1 && g.t > 2 { None } else { Some(g) };
+        MotionData {
+            dx: dx as i16,
+            dy: dy as i16,
+        }
     }
 
     /// One absolute packet (X, Y, Z) turned into cursor deltas, wheel ticks
@@ -409,7 +509,10 @@ where
         let mut out = MotionData::default();
 
         if self.gesture == Gesture::None {
-            // Touch-down: nothing moves on the first packet.
+            // Touch-down: nothing moves on the first packet, and a glide
+            // still running stops here.
+            self.glide = None;
+            self.speed = (0.0, 0.0);
             let ring_inner = 1.0 - self.config.ring_width_percent as f32 / 100.0;
             let in_ring = self.config.scroll_ring && fx * fx + fy * fy >= ring_inner * ring_inner;
             self.gesture = if in_ring { Gesture::Deciding { fx, fy } } else { Gesture::Cursor };
@@ -459,6 +562,13 @@ where
                     out.dx = (ax / div) as i16;
                     out.dy = (ay / div) as i16;
                     self.cursor_rem = (ax % div, ay % div);
+                    // Smoothed over the last few packets, so one noisy
+                    // sample at the lift does not set the glide's direction.
+                    self.speed = (
+                        (self.speed.0 + out.dx as f32) / 2.0,
+                        (self.speed.1 + out.dy as f32) / 2.0,
+                    );
+                    self.speed_at = now;
                 }
             }
             Gesture::Deciding { .. } | Gesture::None => {}
@@ -640,11 +750,18 @@ where
         // Without a DR pin `motion_pending` cannot tell, so ask the pad.
         // 0xFF is what a floating or unwired SO line reads as; it is not a
         // status, and acting on it would replay the pad's last packet forever.
-        if self.dr.is_none() {
-            let status = self.read_reg(REG_STATUS1).await?;
-            if status == 0xFF || status & STATUS_SW_DR == 0 {
-                return Ok(MotionData::default());
+        let now = Instant::now();
+        let packet_ready = match &mut self.dr {
+            // Wrapped in ActiveHigh: "low" here is DR asserted.
+            Some(dr) => dr.is_low().unwrap_or(true),
+            None => {
+                let status = self.read_reg(REG_STATUS1).await?;
+                status != 0xFF && status & STATUS_SW_DR != 0
             }
+        };
+        if !packet_ready {
+            // Nothing from the pad: a glide, if one is running, moves on.
+            return Ok(self.glide_step(now));
         }
 
         if self.config.scroll_ring {
@@ -659,7 +776,13 @@ where
             let x = packet[2] as u16 | ((packet[4] & 0x0F) as u16) << 8;
             let y = packet[3] as u16 | ((packet[4] & 0xF0) as u16) << 4;
             let z = packet[5] & 0x3F;
-            return Ok(self.absolute_to_motion(x, y, z));
+            // The packet first (a new touch cancels a glide, the idle packets
+            // after a lift do not), then the glide's own step if still due.
+            let mut out = self.absolute_to_motion(x, y, z);
+            let g = self.glide_step(now);
+            out.dx = out.dx.saturating_add(g.dx);
+            out.dy = out.dy.saturating_add(g.dy);
+            return Ok(out);
         }
 
         let mut packet = [0u8; 4];
@@ -702,6 +825,7 @@ where
     async fn set_low_power(&mut self, enabled: bool) -> Result<(), PointingDriverError> {
         if enabled {
             self.powered_down = true;
+            self.glide = None;
             self.cs.release();
             return Ok(());
         }
@@ -721,6 +845,7 @@ where
         self.cs.drive_high();
         self.last_pos = None;
         self.gesture = Gesture::None;
+        self.glide = None;
         self.click_pending = 0;
         self.ring_acc = 0.0;
         self.cursor_rem = (0, 0);
@@ -737,8 +862,8 @@ where
         if self.powered_down {
             return false;
         }
-        if self.needs_config {
-            return true; // keep the read loop coming until the pad is configured
+        if self.needs_config || self.glide.is_some() {
+            return true; // keep the read loop coming: configuring, or gliding
         }
         match &mut self.dr {
             Some(dr) => dr.is_low().unwrap_or(true),
@@ -749,7 +874,8 @@ where
     fn motion_gpio(&mut self) -> Option<&mut DR> {
         // An unconfigured pad never raises DR, so waiting on the pin would
         // wait for ever: poll on the timer until it is configured again.
-        if self.needs_config {
+        if self.needs_config || self.glide.is_some() {
+            // A glide moves the cursor with no packets coming from the pad.
             return None;
         }
         self.dr.as_mut()
