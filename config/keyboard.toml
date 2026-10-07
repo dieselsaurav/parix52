@@ -41,10 +41,12 @@ dcdc_reg1 = false
 ble_profiles_num = 4
 # 14 combos ported from ZMK (default slot limit is 8)
 combo_max_num = 16
-# Light sleep after 10 min idle (mirrors the ZMK IDLE_TIMEOUT): displays
-# blank, RGB off, split link relaxes to a 200 ms interval; any key wakes.
-# (RMK has no ZMK-style System-OFF deep sleep yet — roadmap item.)
-split_central_sleep_timeout_seconds = 600
+# Sleep after 60 s without a key or a pointer move on either half: the
+# lights, the OLED and the trackpad lose their supply (src/rgb.rs switches
+# the module's VCC output off), and the split link relaxes. Any key on
+# either half wakes everything; the trackpad cannot, it has no power then.
+# (RMK has no ZMK-style System-OFF deep sleep.)
+split_central_sleep_timeout_seconds = 60
 
 # On-chip flash storage (Vial live-remaps, BLE bonds, selected profile
 # survive power-off).

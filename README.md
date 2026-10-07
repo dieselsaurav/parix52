@@ -87,6 +87,8 @@ The right half carries a 40 mm Cirque trackpad.
   right home row moves the pointer in steps, the row below it scrolls. The lights turn
   cyan while this layer is on. You can also hold `` ` `` to reach the same layer.
 - Tapping the pad is not a click.
+- After a minute without any key or pointer move the keyboard sleeps and the pad is
+  switched off with the lights: press any key first, then use the pad.
 
 The trackpad only works with the right half linked to the left; it needs no pairing of
 its own.
@@ -98,14 +100,13 @@ you are on: letters warm white, digits green, modifiers yellow, editing keys pin
 layer keys in the colour of the layer they open, dark when the key does nothing. Hold a
 layer key and only its live keys stay lit.
 
-- The lights go dark after **one minute** without a key, a pointer move or a layer
-  change on that half, and come back on the next one. (Each half watches its own keys,
-  so a half you are not using goes dark first.)
-- After **ten minutes** without any activity the keyboard sleeps: the lights' supply is
-  switched off completely, along with the screen and the trackpad, which is what makes
-  the battery last. **Press any key to wake it.** The trackpad cannot wake a sleeping
-  keyboard, because it has no power then; it responds again about a quarter of a second
-  after the key.
+- After **one minute** without a key or a pointer move on either half, the keyboard
+  sleeps: the supply to the lights, the screen and the trackpad is switched off
+  completely, which is what makes the battery last. **Press any key on either half to
+  wake it.** The trackpad cannot wake a sleeping keyboard, because it has no power then;
+  it responds again about a quarter of a second after the key.
+- A half you are not using goes dark after a minute even while the other is in use; its
+  trackpad keeps working, and a key or a touch on it brings its lights back.
 - **Space + Y** turns all lights and the screen off and on by hand (the DISPOFF layer).
 
 The left half's screen shows the connection (USB or the Bluetooth profile number), the
@@ -121,8 +122,7 @@ off. The left half reports its level to the computer; the screen shows it too.
 
 The lights are most of the power budget: a half with its lights on draws around
 60–100 mA, and the LED chips keep taking about 15 mA even when dark, until the keyboard
-sleeps and switches their supply off. With the one-minute lights timeout and the
-ten-minute sleep, a day of normal use costs roughly 150–300 mAh per half. Use the slide
+sleeps and switches their supply off. With the one-minute sleep, a day of normal use costs roughly 150–300 mAh per half. Use the slide
 switch when the keyboard is put away for long.
 
 ## Changing the keymap with Vial
