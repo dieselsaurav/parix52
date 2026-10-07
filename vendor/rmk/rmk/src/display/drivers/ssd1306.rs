@@ -19,6 +19,10 @@ where
         // PARIX PATCH: the panel's own default is its "normal" level, which
         // is harsh on a desk at night. Applied on every init, since the panel
         // is initialised again each time its supply returns from a sleep.
+        self.apply_brightness().await;
+    }
+
+    async fn apply_brightness(&mut self) {
         let level = match super::super::display_brightness() {
             0 => ssd1306::prelude::Brightness::DIMMEST,
             1 => ssd1306::prelude::Brightness::DIM,

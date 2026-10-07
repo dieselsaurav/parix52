@@ -110,6 +110,9 @@ layer key and only its live keys stay lit.
   wake it.** The trackpad cannot wake a sleeping keyboard, because it has no power then;
   it responds again about a quarter of a second after the key.
 - **Space + Y** turns all lights and the screen off and on by hand (the DISPOFF layer).
+- **Space + O** makes the screen one step dimmer, **Space + P** one step brighter. There
+  are five steps and the keyboard remembers the one you leave it on. The range of this
+  small screen is narrow, so the steps are subtle.
 
 The left half has a small screen (the right has the trackpad in its place):
 

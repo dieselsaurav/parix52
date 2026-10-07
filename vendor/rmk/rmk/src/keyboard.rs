@@ -1628,6 +1628,13 @@ impl<'a> Keyboard<'a> {
     async fn process_user(&mut self, id: u8, event: KeyboardEvent) {
         debug!("Processing user key id: {:?}, event: {:?}", id, event);
 
+        // PARIX PATCH: User10 / User11 step the screen one level dimmer /
+        // brighter, on the press. (User8 is unused; User9 is the dongle's.)
+        #[cfg(feature = "display")]
+        if event.pressed && (id == 10 || id == 11) {
+            crate::display::step_display_brightness(id == 11).await;
+        }
+
         #[cfg(feature = "_ble")]
         {
             use crate::NUM_BLE_PROFILE;

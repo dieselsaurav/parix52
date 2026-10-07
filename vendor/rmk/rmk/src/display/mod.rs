@@ -106,10 +106,27 @@ use crate::processor::Processor;
 /// SSD1306's own default. Set by the firmware before the display starts.
 static DISPLAY_BRIGHTNESS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(2);
 
-/// Choose the panel brightness, 0 (dimmest) to 4 (brightest). Takes effect
-/// the next time the panel is initialised: at start and after every sleep.
+/// The user-data slot the brightness is kept in (see `storage::store_user_data`).
+#[cfg(feature = "storage")]
+const BRIGHTNESS_SLOT: u8 = 0;
+
+/// Choose the panel brightness, 0 (dimmest) to 4 (brightest). The panel
+/// takes it on its next redraw.
 pub fn set_display_brightness(level: u8) {
     DISPLAY_BRIGHTNESS.store(level.min(4), core::sync::atomic::Ordering::Relaxed);
+}
+
+/// One step dimmer (`brighter == false`) or brighter, stopping at either
+/// end, and remembered across power-offs. The brightness keys call this.
+pub(crate) async fn step_display_brightness(brighter: bool) {
+    let old = display_brightness();
+    let new = if brighter { (old + 1).min(4) } else { old.saturating_sub(1) };
+    if new == old {
+        return;
+    }
+    set_display_brightness(new);
+    #[cfg(feature = "storage")]
+    crate::storage::store_user_data(BRIGHTNESS_SLOT, &[new]).await.ok();
 }
 
 pub(crate) fn display_brightness() -> u8 {
@@ -217,6 +234,11 @@ pub trait DisplayDriver: DrawTarget {
     fn init(&mut self) -> impl core::future::Future<Output = ()>;
     /// Flush the framebuffer to the display.
     fn flush(&mut self) -> impl core::future::Future<Output = ()>;
+    /// PARIX PATCH: send the level of [`set_display_brightness`] to the
+    /// panel. Panels without a brightness command keep the default.
+    fn apply_brightness(&mut self) -> impl core::future::Future<Output = ()> {
+        async {}
+    }
 }
 
 /// Trait for custom display renderers.
@@ -286,6 +308,10 @@ where
     initialized: bool,
     /// PARIX PATCH: when a transfer last timed out; the panel is left alone for a while after.
     io_failed_at: Option<Instant>,
+    /// PARIX PATCH: the brightness the panel was last given, and whether the
+    /// remembered level has been read back from the store yet.
+    applied_brightness: Option<u8>,
+    brightness_loaded: bool,
     last_render: Instant,
     pending_render: bool,
     /// Minimum time between renders (rate-limiter for event-driven renders).
@@ -325,6 +351,8 @@ where
             ctx: RenderContext::default(),
             initialized: false,
             io_failed_at: None,
+            applied_brightness: None,
+            brightness_loaded: false,
             last_render: Instant::from_ticks(0),
             pending_render: false,
             min_render_interval: Duration::from_millis(33),
@@ -393,6 +421,20 @@ where
             self.pending_render = false;
             return;
         }
+        // PARIX PATCH: the level the brightness keys left, read once. The
+        // store answers only after its task has started, so a read that
+        // times out is tried again on the next redraw.
+        #[cfg(feature = "storage")]
+        if !self.brightness_loaded {
+            if let Ok(stored) =
+                embassy_time::with_timeout(IO_TIMEOUT, crate::storage::read_user_data(BRIGHTNESS_SLOT)).await
+            {
+                if let Some(level) = stored.as_ref().and_then(|data| data.first()) {
+                    set_display_brightness(*level);
+                }
+                self.brightness_loaded = true;
+            }
+        }
         if !self.initialized {
             if embassy_time::with_timeout(IO_TIMEOUT, self.display.init()).await.is_err() {
                 self.io_failed_at = Some(Instant::now());
@@ -400,6 +442,16 @@ where
                 return;
             }
             self.initialized = true;
+            // init() sends the level as well.
+            self.applied_brightness = Some(display_brightness());
+        }
+        let level = display_brightness();
+        if self.applied_brightness != Some(level)
+            && embassy_time::with_timeout(IO_TIMEOUT, self.display.apply_brightness())
+                .await
+                .is_ok()
+        {
+            self.applied_brightness = Some(level);
         }
 
         self.renderer.render(&self.ctx, &mut self.display);

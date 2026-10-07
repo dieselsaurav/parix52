@@ -47,6 +47,26 @@
       "name": "SWITCH",
       "title": "Switch output USB/BLE",
       "shortName": "Switch\nOutput"
+    },
+    {
+      "name": "USER8",
+      "title": "Unused",
+      "shortName": "User\n8"
+    },
+    {
+      "name": "USER9",
+      "title": "Unused",
+      "shortName": "User\n9"
+    },
+    {
+      "name": "OLED_DIM",
+      "title": "Screen one step dimmer",
+      "shortName": "OLED\n-"
+    },
+    {
+      "name": "OLED_BRI",
+      "title": "Screen one step brighter",
+      "shortName": "OLED\n+"
     }
   ],
   "layouts": {

@@ -81,10 +81,17 @@ goes over Bluetooth" when a USB cable is in as well.
 
 `rmk/src/display/mod.rs`, `rmk/src/display/drivers/ssd1306.rs`.
 
+`rmk/src/keyboard.rs` (`process_user`).
+
 `rmk::display::set_display_brightness(0..=4)`; the SSD1306 driver applies it
-on every init. Upstream has no brightness setting. The level is a constant in
-`src/status.rs`, not a keyboard.toml key, so changing it does not wipe the
-store.
+on every init, and the display processor sends it again (`DisplayDriver::
+apply_brightness`, a no-op for other panels) whenever the level differs from
+the one the panel last got. Upstream has no brightness setting.
+
+`User10` and `User11` step the level down and up on the press and save it in
+user-data slot 0 (`storage::store_user_data`); the display processor reads the
+slot back before its first init. Until the keys are used, the level is the
+constant in `src/status.rs`.
 
 ## Battery level
 

@@ -54,6 +54,7 @@ KEYCODE_DISPLAY: dict[str, str] = {
     # ble_profiles_num = 4 gives these User keys their meaning
     "User0": "BT 1", "User1": "BT 2", "User2": "BT 3", "User3": "BT 4",
     "User4": "BT next", "User5": "BT prev", "User6": "BT clear", "User7": "USB/BT",
+    "User10": "OLED -", "User11": "OLED +",
     "LGui": "Cmd", "RGui": "Cmd", "LAlt": "Opt", "RAlt": "Opt",
     "LCtrl": "Ctrl", "RCtrl": "Ctrl", "LShift": "Shift", "RShift": "Shift",
     "No": "", "_______": "",
