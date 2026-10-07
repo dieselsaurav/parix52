@@ -1754,6 +1754,7 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "embedded-storage",
+ "heapless 0.9.3",
  "json",
  "nrf-mpsl",
  "nrf-sdc",

@@ -8,6 +8,7 @@ mod layer_names;
 mod rgb;
 mod rgb_map;
 mod status;
+mod status_view;
 
 #[rmk_central]
 mod keyboard_central {

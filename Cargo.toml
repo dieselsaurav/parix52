@@ -52,6 +52,7 @@ embedded-graphics = "0.8"
 embedded-storage = "0.3"
 
 u8g2-fonts = "0.8.0"
+heapless = "0.9"
 
 [build-dependencies]
 xz2 = "0.1.7"

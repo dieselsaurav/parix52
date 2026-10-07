@@ -111,9 +111,16 @@ layer key and only its live keys stay lit.
   it responds again about a quarter of a second after the key.
 - **Space + Y** turns all lights and the screen off and on by hand (the DISPOFF layer).
 
-The left half's screen shows the connection (USB or the Bluetooth profile number), the
-battery level and the layer in use. The right half has no screen; the trackpad sits
-where it would be.
+The left half has a small screen (the right has the trackpad in its place):
+
+![The left half's screen in four states](docs/oled.png)
+
+| Where | What |
+|---|---|
+| Top left | The layer in use |
+| Top right | Where your typing goes: `USB`, or `BT` and the profile number (1–4) with its state. `on` = connected. `..` = paired, looking for its computer. `pair` = nothing paired on this profile, open for pairing |
+| Bottom left | The modifiers held right now, as their Mac symbols (⌘ ⌥ ⌃ ⇧), and a boxed **A** while Caps Lock is on |
+| Bottom right | Both batteries, left then right, with a bar under each. A bolt replaces the **L** while the left half is on USB power; `--` means the right half is not linked |
 
 ## Battery
 
