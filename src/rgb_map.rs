@@ -81,15 +81,15 @@ const COLORS: [[Rgb; NUM_KEYS]; NUM_LAYERS] = [
         ___, SYM, NUM, NUM, NUM, SYM,    ___, ___, ___, ___, ___, ___,
                             NUM, SYM,    ___, NUM,
     ],
-    // 3 MEDIA (hold Space, first left thumb). Row 0: the key lights (base
-    // colour, base on/off, dimmer, brighter); the first two show the current
-    // setting instead of white (see `color`). Row 1: displays/RGB off, the
-    // computer's screen brightness, the OLED's brightness. Row 3: output toggle, four Bluetooth profiles, clear bond.
+    // 3 MEDIA (hold Space, first left thumb), one subject per row. Number
+    // row: the two screens, yellow. Top row: the key lights, white; the first
+    // two show the current setting instead (see `color`). Home row: all off
+    // in red, then media. Bottom row: output toggle, four Bluetooth profiles.
     [
-        ___, ___, ___, ___, ___, ___,    ___, WHT, WHT, WHT, WHT, ___,
-        ___, ___, ___, ___, ___, ___,    FUN, WHT, WHT, WHT, WHT, ___,
-        ___, MOD, MOD, MOD, MOD, ___,    ___, MED, MED, MED, MED, ___,
-        ___, ___, ___, ___, ___, ___,    WHT, NAV, NAV, NAV, NAV, FUN,
+        ___, ___, ___, ___, ___, ___,    ___, MOD, MOD, MOD, MOD, ___,
+        ___, ___, ___, ___, ___, ___,    WHT, WHT, ___, WHT, WHT, ___,
+        ___, MOD, MOD, MOD, MOD, ___,    FUN, MED, MED, MED, MED, ___,
+        ___, ___, ___, ___, ___, ___,    WHT, NAV, NAV, NAV, NAV, ___,
                             MED, ___,    MED, MED,
     ],
     // 4 SYM (hold Enter, first right thumb).
@@ -156,7 +156,7 @@ const fn key_index(side: Side, led: usize) -> usize {
     }
 }
 
-/// What the base layer's plain keys can be lit in; Space + 7 steps through
+/// What the base layer's plain keys can be lit in; Space + U steps through
 /// them. Even white first, then round the colour wheel.
 const BASE_COLORS: [Rgb; rmk::key_light::BASE_COLORS as usize] = [
     (20, 20, 20), // white
@@ -174,9 +174,9 @@ const BRIGHTNESS_EIGHTHS: [u16; rmk::key_light::BRIGHTNESS_MAX as usize + 1] = [
 
 const BASE_LAYER: usize = 0;
 const MEDIA_LAYER: usize = 3;
-/// On MEDIA, the keys for the base colour (Space + 7) and base on/off (Space + 8).
-const KEY_BASE_COLOR: usize = 7;
-const KEY_BASE_TOGGLE: usize = 8;
+/// On MEDIA, the keys for base on/off (Space + Y) and the base colour (Space + U).
+const KEY_BASE_TOGGLE: usize = 12 + 6;
+const KEY_BASE_COLOR: usize = 12 + 7;
 
 fn dimmed((r, g, b): Rgb, brightness: u8) -> Rgb {
     let eighths = BRIGHTNESS_EIGHTHS[(brightness as usize).min(BRIGHTNESS_EIGHTHS.len() - 1)];

@@ -798,26 +798,22 @@ path.combo {
 </g>
 <g transform="translate(547, 48)" class="key keypos-7">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">Base</tspan><tspan x="0" dy="1.2em">colour</tspan>
-</text>
+<text x="0" y="0" class="key tap">Bri-</text>
 </g>
 <g transform="translate(603, 28)" class="key keypos-8">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">Base</tspan><tspan x="0" dy="1.2em">light</tspan>
-</text>
+<text x="0" y="0" class="key tap">Bri+</text>
 </g>
 <g transform="translate(659, 38)" class="key keypos-9">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
 <text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">Light</tspan><tspan x="0" dy="1.2em">-</tspan>
+<tspan x="0" dy="-0.6em">OLED</tspan><tspan x="0" dy="1.2em">-</tspan>
 </text>
 </g>
 <g transform="translate(715, 52)" class="key keypos-10">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
 <text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">Light</tspan><tspan x="0" dy="1.2em">+</tspan>
+<tspan x="0" dy="-0.6em">OLED</tspan><tspan x="0" dy="1.2em">+</tspan>
 </text>
 </g>
 <g transform="translate(771, 52)" class="key keypos-11">
@@ -844,27 +840,28 @@ path.combo {
 <g transform="translate(491, 114)" class="key keypos-18">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
 <text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">DISPOFF</tspan><tspan x="0" dy="1.2em">on/off</tspan>
+<tspan x="0" dy="-0.6em">Base</tspan><tspan x="0" dy="1.2em">light</tspan>
 </text>
 </g>
 <g transform="translate(547, 104)" class="key keypos-19">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">Bri-</text>
+<text x="0" y="0" class="key tap">
+<tspan x="0" dy="-0.6em">Base</tspan><tspan x="0" dy="1.2em">colour</tspan>
+</text>
 </g>
 <g transform="translate(603, 84)" class="key keypos-20">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">Bri+</text>
 </g>
 <g transform="translate(659, 94)" class="key keypos-21">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
 <text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">OLED</tspan><tspan x="0" dy="1.2em">-</tspan>
+<tspan x="0" dy="-0.6em">Light</tspan><tspan x="0" dy="1.2em">-</tspan>
 </text>
 </g>
 <g transform="translate(715, 108)" class="key keypos-22">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
 <text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">OLED</tspan><tspan x="0" dy="1.2em">+</tspan>
+<tspan x="0" dy="-0.6em">Light</tspan><tspan x="0" dy="1.2em">+</tspan>
 </text>
 </g>
 <g transform="translate(771, 108)" class="key keypos-23">
@@ -894,6 +891,9 @@ path.combo {
 </g>
 <g transform="translate(491, 170)" class="key keypos-30">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
+<text x="0" y="0" class="key tap">
+<tspan x="0" dy="-0.6em">DISPOFF</tspan><tspan x="0" dy="1.2em">on/off</tspan>
+</text>
 </g>
 <g transform="translate(547, 160)" class="key keypos-31">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
@@ -962,9 +962,6 @@ path.combo {
 </g>
 <g transform="translate(771, 220)" class="key keypos-47">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">
-<tspan x="0" dy="-0.6em">BT</tspan><tspan x="0" dy="1.2em">clear</tspan>
-</text>
 </g>
 <g transform="translate(313, 293) rotate(29.0)" class="key keypos-48">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
@@ -978,7 +975,7 @@ path.combo {
 </g>
 <g transform="translate(486, 293) rotate(-29.0)" class="key keypos-51">
 <rect rx="6" ry="6" x="-26" y="-26" width="52" height="52" class="key"/>
-<text x="0" y="0" class="key tap">Stop</text>
+<text x="0" y="0" class="key tap">Mute</text>
 </g>
 </g>
 </g>

@@ -54,7 +54,7 @@ pub struct RgbProcessor {
     side: Side,
     layer: u8,
     /// Base light on/off, its colour and the brightness, set from the
-    /// keyboard (Space + 7 8 9 0); the left half sends them to the right.
+    /// keyboard (Space + Y U O P); the left half sends them to the right.
     light: LightSettings,
     /// The keyboard is asleep: lights dark and the rail off.
     sleeping: bool,

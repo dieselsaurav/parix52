@@ -151,27 +151,32 @@ No Grave       Kc1 Kc2 Kc3 Backslash       No No     No    No   No   No
                        Kc0 Dot             No No
 """
 
-# Layer 3 — MEDIA (hold SPACE). Media transport + all Bluetooth management:
-#   User0-3 = select BT profile 0-3    User6 = clear bond of CURRENT profile
-#   User7   = toggle output USB <-> BLE  TG(7) = blank OLEDs + RGB (layer 7)
-#   User12 = base layer light on/off   User13 / User14 = key lights dimmer /
-#   brighter   User15 = next base colour (all four: vendor/rmk key_light.rs)
-#   User10 / User11 = the OLED one step dimmer / brighter (five steps, kept
-#   across power-offs; a patch in vendor/rmk, see PATCH.md)
+# Layer 3 — MEDIA (hold SPACE). Laid out like Miryoku's media layer, one
+# subject per row, with the number row for what Miryoku does not have:
+#   number row  computer screen dimmer / brighter, then User10 / User11 = the
+#               OLED one step dimmer / brighter
+#   top row     key lights (Miryoku: RGB): User12 = base layer light on/off,
+#               User15 = next base colour, User13 / User14 = dimmer / brighter
+#   home row    TG(7) = everything dark, lights and OLED (Miryoku: ext power),
+#               then previous, volume down, volume up, next
+#   bottom row  User7 = output USB <-> BLE, User0-3 = BT profile 1-4. Holding
+#               a profile key 5 s forgets its pairing and pairs afresh, so
+#               there is no separate clear-bond key (User6) to hit by accident.
+#   thumbs      play/pause, mute
+# The light and OLED keys are patches in vendor/rmk (PATCH.md); their
+# settings are kept across power-offs.
 #   No Bootloader key. RMK's jump is a SOFT reset, the nRF52 watchdog
 #   survives a soft reset, and the Adafruit bootloader never feeds it: the
 #   DFU session would be killed 10 s in, mid-copy. Double-tap the reset
 #   button instead -- a PIN reset does clear the watchdog.
-# (ZMK rgb_ug / ext_power keys not ported — no RMK support yet; TG(7) is the
-# RGB kill switch instead.)
 [[keymap.layer]]
 name = "MEDIA"
 keys = """
-No No   No   No    No     No    No             User15         User12       User13     User14         No
-No No   No   No    No     No    TG(7)          BrightnessDown BrightnessUp User10     User11         No
-No LGui LAlt LCtrl LShift No    No             MediaPrevTrack AudioVolDown AudioVolUp MediaNextTrack No
-No No   No   No    No     No    User7          User0          User1        User2      User3          User6
-                   No     No    MediaPlayPause MediaStop
+No No   No   No    No     No    No             BrightnessDown BrightnessUp User10     User11         No
+No No   No   No    No     No    User12         User15         No           User13     User14         No
+No LGui LAlt LCtrl LShift No    TG(7)          MediaPrevTrack AudioVolDown AudioVolUp MediaNextTrack No
+No No   No   No    No     No    User7          User0          User1        User2      User3          No
+                   No     No    MediaPlayPause AudioMute
 """
 
 # Layer 4 — SYM (hold ENTER). NUM layer with shift applied: same positions,
@@ -249,8 +254,12 @@ combos = [
 # tapping-term 200ms, require-prior-idle 150ms, quick-tap 175ms.
 #   HRM (home-row mods): flow-tap + permissive-hold + unilateral_tap —
 #     biased hard toward "it's a letter" (ZMK mt tap-preferred + prior-idle).
-#   TL (thumb layer-taps): flow-tap OFF (holding Space for NAV mid-streak
-#     must not force a literal space), permissive-hold ≈ ZMK lt "balanced".
+#   TL (thumb and corner layer-taps): flow-tap OFF (holding Space for NAV
+#     mid-streak must not force a literal space), and normal mode = Miryoku's
+#     "tap-preferred": the key is a layer only once it has been held for the
+#     full hold_timeout. Permissive hold was tried and misfired: Space, then
+#     a letter tapped before the thumb came up, ran the MEDIA key under that
+#     letter (N switched the output, M the Bluetooth profile).
 # ============================================================================
 [behavior.morse]
 enable_flow_tap = true
@@ -260,7 +269,7 @@ gap_timeout = "175ms"
 
 [behavior.morse.profiles]
 HRM = { enable_flow_tap = true, permissive_hold = true, unilateral_tap = true, hold_timeout = "200ms", gap_timeout = "175ms" }
-TL = { enable_flow_tap = false, permissive_hold = true, hold_timeout = "200ms", gap_timeout = "175ms" }
+TL = { enable_flow_tap = false, normal_mode = true, hold_timeout = "200ms", gap_timeout = "175ms" }
 
 # ============================================================================
 # SPLIT — halves talk BLE; only the central talks to the computer.

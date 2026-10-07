@@ -39,7 +39,7 @@ fn charging(status: &BatteryStatus) -> bool {
     )
 }
 
-/// Panel brightness until the brightness keys (Space + O / P) are first
+/// Panel brightness until the brightness keys (Space + 9 / 0) are first
 /// used, 0 (dimmest) to 4 (brightest); after that the level they left is
 /// remembered. The panel's own default is 2, which is glaring in a dim room.
 /// The range of these small OLEDs is narrow: 0 is "noticeably dimmer", not

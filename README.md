@@ -39,18 +39,19 @@ Keys drawn between two keys are **combos**: press both together.
 | **NAV** | Tab (left thumb) | Arrows on H J K L, Home/End/PgUp/PgDn, Cmd-Z/X/C/V, Caps Lock |
 | **NUM** | Backspace (right thumb) | Number pad on the left hand, brackets and symbols around it |
 | **SYM** | Enter (right thumb) | The same positions as NUM, shifted: `{ } ( ) & * ! @` … |
-| **MEDIA** | Space (left thumb) | Volume, media, brightness, Bluetooth, USB/BT switch, lights off |
+| **MEDIA** | Space (left thumb) | Screens, key lights, media and volume, USB/BT switch, Bluetooth profiles |
 | **FUN** | `-` (top right) | F1–F12 on the left hand, Print Screen, Scroll Lock, Pause |
 | **MOUSE** | `` ` `` (top left) | Cursor and wheel keys, mouse buttons on the right thumbs; also switched on by the trackpad |
-| **DISPOFF** | Space + Y toggles | Nothing: lights and screens go dark |
+| **DISPOFF** | Space + H toggles | Nothing: lights and screens go dark |
 
 **Combos** (press together): Q+W = Esc, O+P = Backspace, F+J = Caps Word, X+C = Cmd-C,
 C+V = Cmd-V, X+V = Cmd-X, J+M = `-`, H+N = `_`, F+V = `=`, S+X = `` ` ``, L+' = `;`.
 
 **Tap-hold timing.** A home-row key is a letter when tapped and a modifier when held
 (about 200 ms), and it never becomes a modifier for a key on the same hand, so rolling
-"as" or "df" types the letters. The thumb layer keys work the same way but do become
-layers when the next key follows quickly.
+"as" or "df" types the letters. A layer key (the thumbs and the two top corners) becomes
+a layer only once it has been held for that fifth of a second: press the next key sooner
+and you get the tap, so a quick "space, n" is always a space and an n.
 
 ## Connecting: USB and Bluetooth
 
@@ -64,7 +65,7 @@ right half connects to the left over Bluetooth by itself; nothing to pair there.
 | Space + | Does |
 |---|---|
 | M , . / | Switch to Bluetooth profile 1, 2, 3, 4 |
-| Esc (right pinky, bottom) | Forget the pairing of the current profile |
+| M , . / held for 5 seconds | Forget that profile's pairing and open it for pairing again |
 | N | Switch typing between USB and Bluetooth when both are connected |
 
 Pairing is remembered across power-offs. **After a firmware update that changes the
@@ -104,25 +105,30 @@ their key is lit. The base layer starts dark: plain white caps, nothing to distr
 and very little drawn from the battery (you can switch it on, below). Hold a layer key and that layer's live keys light
 up, legends and all, coloured by what they do: digits green, symbols orange, arrows and
 Bluetooth profiles blue, media violet, modifiers yellow, editing keys magenta, F-keys
-and "forget pairing" red. A key that does nothing there stays dark.
+and "everything dark" red. A key that does nothing there stays dark.
 
 - After **one minute** without a key or a pointer move on either half, the keyboard
   sleeps: the supply to the lights, the screen and the trackpad is switched off
   completely, which is what makes the battery last. **Press any key on either half to
   wake it.** The trackpad cannot wake a sleeping keyboard, because it has no power then;
   it responds again about a quarter of a second after the key.
-- **Space + Y** turns all lights and the screen off and on by hand (the DISPOFF layer).
-- **Space + 8** switches the base layer's light on and off. It starts off. On, every key
-  glows one colour so the legends read, and the six layer keys (the four thumbs and the
-  two top corners) show the colour of the layer they open.
-- **Space + 7** steps the base colour: white, blue, cyan, green, yellow, orange, red,
-  magenta. While Space is held, the 7 key shows the colour you are choosing and the 8 key
-  is white when the base light is on, red when it is off.
-- **Space + 9** makes all the key lights one step dimmer, **Space + 0** one step brighter
-  (five steps). These settings are remembered and apply to both halves.
-- **Space + O** makes the screen one step dimmer, **Space + P** one step brighter. There
-  are five steps and the keyboard remembers the one you leave it on. The range of this
-  small screen is narrow, so the steps are subtle.
+
+All the controls are on the right hand while you hold **Space**, one subject per row:
+
+| Space + | Does |
+|---|---|
+| 7 / 8 | Computer screen dimmer / brighter |
+| 9 / 0 | The keyboard's own screen dimmer / brighter (five subtle steps) |
+| Y | Base layer light on / off. It starts off. On, every key glows one colour so the legends read, and the six layer keys show the colour of the layer they open |
+| U | Next base colour: white, blue, cyan, green, yellow, orange, red, magenta |
+| O / P | All key lights dimmer / brighter (five steps) |
+| H | Everything dark, lights and screen, until you press it again |
+| J K L ' | Previous track, volume down, volume up, next track |
+| right thumbs | Play / pause, mute |
+
+While Space is held, the Y key is white when the base light is on and red when it is
+off, and the U key shows the colour you are choosing. The light and screen settings are
+remembered across power-offs and apply to both halves.
 
 The left half has a small screen (the right has the trackpad in its place):
 
