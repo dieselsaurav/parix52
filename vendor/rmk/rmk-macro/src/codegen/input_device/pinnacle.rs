@@ -70,11 +70,10 @@ pub(crate) fn expand_pinnacle_device(
         let device_init = quote! {
             let mut #device_ident = {
                 use ::embassy_nrf::spim::{Frequency, Spim, Config, MODE_1};
-                use ::embassy_nrf::gpio::{Output, OutputDrive, Level};
-                use ::rmk::input_device::pinnacle::{ActiveHigh, Pinnacle, PinnacleConfig};
+                use ::rmk::input_device::pinnacle::{ActiveHigh, NrfChipSelect, Pinnacle, PinnacleConfig};
                 use ::rmk::input_device::pointing::PointingDevice;
 
-                let cs = Output::new(p.#cs_ident, Level::High, OutputDrive::Standard);
+                let cs = NrfChipSelect::new(p.#cs_ident);
                 let dr = #dr_init;
 
                 let mut spi_config = Config::default();

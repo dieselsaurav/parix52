@@ -189,9 +189,67 @@ impl<P: Wait> Wait for ActiveHigh<P> {
     }
 }
 
+/// A chip-select line that can also be let go.
+///
+/// While the pad's supply is off the line must not be driven at all: driven
+/// high it feeds the dead rail through the pad's input protection, and the
+/// pad then powers up slowly from that leak instead of from its supply;
+/// driven low the pad sees it low as it powers up and does not start as an
+/// SPI device. Released, the pad's own R1 holds it, which is exactly the
+/// state of a cold start, when the controller's pins float through the
+/// bootloader while the rail is already up.
+pub trait ChipSelect: OutputPin {
+    /// Stop driving the line.
+    fn release(&mut self);
+    /// Drive the line again, high (deselected).
+    fn drive_high(&mut self);
+}
+
+/// [`ChipSelect`] on an nRF GPIO.
+#[cfg(feature = "_nrf_ble")]
+pub struct NrfChipSelect(embassy_nrf::gpio::Flex<'static>);
+
+#[cfg(feature = "_nrf_ble")]
+impl NrfChipSelect {
+    pub fn new(pin: embassy_nrf::Peri<'static, impl embassy_nrf::gpio::Pin>) -> Self {
+        let mut pin = embassy_nrf::gpio::Flex::new(pin);
+        pin.set_high();
+        pin.set_as_output(embassy_nrf::gpio::OutputDrive::Standard);
+        Self(pin)
+    }
+}
+
+#[cfg(feature = "_nrf_ble")]
+impl ErrorType for NrfChipSelect {
+    type Error = core::convert::Infallible;
+}
+
+#[cfg(feature = "_nrf_ble")]
+impl OutputPin for NrfChipSelect {
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        self.0.set_low();
+        Ok(())
+    }
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        self.0.set_high();
+        Ok(())
+    }
+}
+
+#[cfg(feature = "_nrf_ble")]
+impl ChipSelect for NrfChipSelect {
+    fn release(&mut self) {
+        self.0.set_as_disconnected();
+    }
+    fn drive_high(&mut self) {
+        self.0.set_high();
+        self.0.set_as_output(embassy_nrf::gpio::OutputDrive::Standard);
+    }
+}
+
 /// Pinnacle driver over an SPI bus (mode 1) with a chip-select output and an
 /// optional data-ready input (already wrapped in [`ActiveHigh`]).
-pub struct Pinnacle<SPI: SpiBus, CS: OutputPin, DR: InputPin + Wait> {
+pub struct Pinnacle<SPI: SpiBus, CS: ChipSelect, DR: InputPin + Wait> {
     id: u8,
     spi: SPI,
     cs: CS,
@@ -217,7 +275,7 @@ pub struct Pinnacle<SPI: SpiBus, CS: OutputPin, DR: InputPin + Wait> {
 impl<SPI, CS, DR> Pinnacle<SPI, CS, DR>
 where
     SPI: SpiBus,
-    CS: OutputPin,
+    CS: ChipSelect,
     DR: InputPin + Wait,
 {
     pub fn new(id: u8, spi: SPI, cs: CS, dr: Option<DR>, config: PinnacleConfig) -> Self {
@@ -454,7 +512,7 @@ where
 impl<SPI, CS, DR> PointingDriver for Pinnacle<SPI, CS, DR>
 where
     SPI: SpiBus,
-    CS: OutputPin,
+    CS: ChipSelect,
     DR: InputPin + Wait,
 {
     type MOTION = DR;
@@ -541,7 +599,7 @@ where
     async fn set_low_power(&mut self, enabled: bool) -> Result<(), PointingDriverError> {
         if enabled {
             self.powered_down = true;
-            let _ = self.cs.set_low();
+            self.cs.release();
             return Ok(());
         }
         // "Awake" is also announced at start and on every reconnect; only a
@@ -549,17 +607,15 @@ where
         if !self.powered_down {
             return Ok(());
         }
-        // Chip select goes high at once, BEFORE the rail returns (src/rgb.rs
-        // waits a few milliseconds before switching it on): the pad decides
-        // between SPI and I2C from this line as it powers up, held high by
-        // its own 470k R1 on an SPI build. Released only after the rail was
-        // up, the pad saw it low, came up as an I2C device and answered
-        // nothing until the next power cycle (2026-10-07).
-        let _ = self.cs.set_high();
-        // Then let the rail come up before talking to the pad. The
-        // configuration itself is done from the read loop, which retries
-        // until the pad answers, instead of giving up after a fixed wait here.
-        Timer::after(Duration::from_millis(80)).await;
+        // The rail is coming back (src/rgb.rs switches it on at this same
+        // event). Chip select stays released while it does, so the pad powers
+        // up the way it does on a cold start; see `ChipSelect`. Two earlier
+        // orders both left the pad dead until the next power cycle: line low
+        // until after the rail (always), line high before the rail (often).
+        // The configuration itself is done from the read loop, which retries
+        // until the pad answers.
+        Timer::after(Duration::from_millis(100)).await;
+        self.cs.drive_high();
         self.last_pos = None;
         self.last_in_ring = false;
         self.ring_acc = 0.0;
@@ -599,7 +655,7 @@ where
 impl<SPI, CS, DR> PointingDevice<Pinnacle<SPI, CS, DR>>
 where
     SPI: SpiBus,
-    CS: OutputPin,
+    CS: ChipSelect,
     DR: InputPin + Wait,
 {
     // The pad produces a packet every 10 ms; polling faster than that only
