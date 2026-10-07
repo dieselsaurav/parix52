@@ -49,6 +49,8 @@ const LIGHTS_IDLE: Duration = Duration::from_secs(60);
 /// Time the switched rail needs to come up before the LEDs take a frame
 /// (ZMK's nice!nano ext-power uses the same 50 ms).
 const RAIL_SETTLE: Duration = Duration::from_millis(50);
+/// Wait between hearing the wake-up and switching the rail on.
+const RAIL_ON_DELAY: Duration = Duration::from_millis(10);
 
 #[processor(subscribe = [LayerChangeEvent, SleepStateEvent, KeyboardEvent, PointingEvent], deadline)]
 pub struct RgbProcessor {
@@ -168,6 +170,11 @@ impl RgbProcessor {
             self.show().await;
             self.rail.set_low();
         } else {
+            // A few milliseconds first: whatever hangs off the rail has to
+            // have its inputs set before it powers up. The trackpad reads
+            // its chip select at power-up to choose SPI or I2C, and its
+            // driver raises that line as soon as it hears this same event.
+            Timer::after(RAIL_ON_DELAY).await;
             self.rail.set_high();
             Timer::after(RAIL_SETTLE).await;
             self.sleeping = false;

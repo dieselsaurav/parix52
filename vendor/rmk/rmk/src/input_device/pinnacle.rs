@@ -549,11 +549,17 @@ where
         if !self.powered_down {
             return Ok(());
         }
-        // Let the rail come up before talking to the pad. The configuration
-        // itself is done from the read loop, which retries until the pad
-        // answers, instead of giving up after a fixed wait here.
-        Timer::after(Duration::from_millis(60)).await;
+        // Chip select goes high at once, BEFORE the rail returns (src/rgb.rs
+        // waits a few milliseconds before switching it on): the pad decides
+        // between SPI and I2C from this line as it powers up, held high by
+        // its own 470k R1 on an SPI build. Released only after the rail was
+        // up, the pad saw it low, came up as an I2C device and answered
+        // nothing until the next power cycle (2026-10-07).
         let _ = self.cs.set_high();
+        // Then let the rail come up before talking to the pad. The
+        // configuration itself is done from the read loop, which retries
+        // until the pad answers, instead of giving up after a fixed wait here.
+        Timer::after(Duration::from_millis(80)).await;
         self.last_pos = None;
         self.last_in_ring = false;
         self.ring_acc = 0.0;
