@@ -654,6 +654,12 @@ where
     async fn configure(&mut self) -> Result<(), PointingDriverError> {
         // Give the pad its power-on time, then check it is the chip we expect.
         Timer::after(Duration::from_millis(T_POWER_ON_MS)).await;
+        // A pad that kept its power across a restart of this controller (a
+        // flash, the reset button, a watchdog) has been idle for seconds and
+        // is in its own low-power sleep. The first access wakes it and may
+        // not be answered, so one read is spent on that before the real one.
+        let _ = self.read_reg(REG_STATUS1).await;
+        Timer::after(Duration::from_millis(5)).await;
         let fw = self.read_reg(REG_FIRMWARE_ID).await?;
         if fw != FIRMWARE_ID_PINNACLE {
             error!("Pinnacle {}: firmware id {:#x}, expected {:#x}", self.id, fw, FIRMWARE_ID_PINNACLE);
@@ -729,7 +735,16 @@ where
     async fn init(&mut self) -> Result<(), PointingDriverError> {
         let _ = self.cs.set_high();
         Timer::after(Duration::from_millis(1)).await;
-        self.configure().await
+        // Never report a failure: the caller gives up for good after three,
+        // and a pad that did not answer at start (still waking, or slow to
+        // power up) would then stay dead until the next power cycle. The
+        // read loop keeps trying twice a second instead, as after a sleep.
+        if self.configure().await.is_err() {
+            warn!("Pinnacle {}: no answer at start, will keep trying", self.id);
+            self.needs_config = true;
+            self.last_config_try = Instant::now();
+        }
+        Ok(())
     }
 
     async fn read_motion(&mut self) -> Result<MotionData, PointingDriverError> {
