@@ -208,6 +208,10 @@ pub struct Pinnacle<SPI: SpiBus, CS: OutputPin, DR: InputPin + Wait> {
     last_packet: Instant,
     /// The keyboard is asleep and the pad's supply may be switched off.
     powered_down: bool,
+    /// The pad came back from a power cut and has not taken its
+    /// configuration yet; retried from the read loop until it does.
+    needs_config: bool,
+    last_config_try: Instant,
 }
 
 impl<SPI, CS, DR> Pinnacle<SPI, CS, DR>
@@ -231,6 +235,8 @@ where
             wheel_pending: 0,
             last_packet: Instant::MIN,
             powered_down: false,
+            needs_config: false,
+            last_config_try: Instant::MIN,
         }
     }
 
@@ -463,6 +469,17 @@ where
         if self.powered_down {
             return Ok(MotionData::default());
         }
+        if self.needs_config {
+            // Not more than twice a second: each try takes ~150 ms.
+            if self.last_config_try.elapsed() >= Duration::from_millis(500) {
+                self.last_config_try = Instant::now();
+                if self.configure().await.is_ok() {
+                    self.needs_config = false;
+                    info!("Pinnacle {}: reconfigured after power-up", self.id);
+                }
+            }
+            return Ok(MotionData::default());
+        }
         // Without a DR pin `motion_pending` cannot tell, so ask the pad.
         // 0xFF is what a floating or unwired SO line reads as; it is not a
         // status, and acting on it would replay the pad's last packet forever.
@@ -527,7 +544,14 @@ where
             let _ = self.cs.set_low();
             return Ok(());
         }
-        // Let the rail come up before talking to the pad.
+        // "Awake" is also announced at start and on every reconnect; only a
+        // pad that was actually put down needs anything done.
+        if !self.powered_down {
+            return Ok(());
+        }
+        // Let the rail come up before talking to the pad. The configuration
+        // itself is done from the read loop, which retries until the pad
+        // answers, instead of giving up after a fixed wait here.
         Timer::after(Duration::from_millis(60)).await;
         let _ = self.cs.set_high();
         self.last_pos = None;
@@ -535,16 +559,10 @@ where
         self.ring_acc = 0.0;
         self.cursor_rem = (0, 0);
         self.wheel_pending = 0;
-        let mut result = Err(PointingDriverError::InitFailed);
-        for _ in 0..3 {
-            result = self.configure().await;
-            if result.is_ok() {
-                break;
-            }
-            Timer::after(Duration::from_millis(50)).await;
-        }
+        self.needs_config = true;
+        self.last_config_try = Instant::MIN;
         self.powered_down = false;
-        result
+        Ok(())
     }
 
     /// With DR: pending while the (inverted) pin reads low, i.e. DR is high.
@@ -553,6 +571,9 @@ where
         if self.powered_down {
             return false;
         }
+        if self.needs_config {
+            return true; // keep the read loop coming until the pad is configured
+        }
         match &mut self.dr {
             Some(dr) => dr.is_low().unwrap_or(true),
             None => true,
@@ -560,6 +581,11 @@ where
     }
 
     fn motion_gpio(&mut self) -> Option<&mut DR> {
+        // An unconfigured pad never raises DR, so waiting on the pin would
+        // wait for ever: poll on the timer until it is configured again.
+        if self.needs_config {
+            return None;
+        }
         self.dr.as_mut()
     }
 }
