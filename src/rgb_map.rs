@@ -34,28 +34,34 @@ const NUM_LAYERS: usize = 8;
 const MAX_CHANNEL: u8 = 32;
 
 // ── Palette ─────────────────────────────────────────────────────────────────
-// Three-letter names so the grids below line up. The six layer colours are
-// the ones the whole half used to show for that layer.
+// Three-letter names so the grids below line up. The keycaps are white with
+// shine-through legends: an unlit key shows no legend at all, so a key is
+// dark only where it does nothing. Every hue uses one or two channels; a
+// three-channel mix at these low levels comes out uneven from LED to LED.
+// The two whites are the exception and keep their channels equal.
 const ___: Rgb = (0, 0, 0); //    dark: the key does nothing here
-const LET: Rgb = (28, 18, 8); //  warm white: letters, punctuation
+const DIM: Rgb = (10, 10, 10); // dim white: every plain key on BASE, enough to read the legend
+const WHT: Rgb = (26, 26, 26); // white: F and J on BASE, brightness and output keys on MEDIA
 const NAV: Rgb = (0, 10, 30); //  blue: NAV layer, arrows, Bluetooth profiles
-const NUM: Rgb = (0, 28, 6); //   green: NUM layer, digits
-const MED: Rgb = (22, 0, 28); //  purple: MEDIA layer, transport, volume
-const SYM: Rgb = (30, 12, 0); //  orange: SYM layer, symbols
-const FUN: Rgb = (30, 2, 2); //   red: FUN layer, F-keys, destructive keys
+const NUM: Rgb = (0, 28, 0); //   green: NUM layer, digits
+const MED: Rgb = (16, 0, 30); //  violet: MEDIA layer, transport, volume
+const SYM: Rgb = (30, 10, 0); //  orange: SYM layer, symbols
+const FUN: Rgb = (30, 0, 0); //   red: FUN layer, F-keys, destructive keys
 const MOU: Rgb = (0, 22, 22); //  cyan: MOUSE layer, pointer, buttons
-const MOD: Rgb = (24, 22, 0); //  yellow: modifiers
-const EDT: Rgb = (28, 4, 14); //  pink: editing keys (Tab, Esc, clipboard...)
+const MOD: Rgb = (24, 20, 0); //  yellow: modifiers
+const EDT: Rgb = (30, 0, 10); //  magenta: editing keys (Tab, Esc, clipboard...)
 
 /// Index = layer number, then key in keyboard.toml grid order.
 #[rustfmt::skip]
 const COLORS: [[Rgb; NUM_KEYS]; NUM_LAYERS] = [
-    // 0 BASE. The six layer-tap keys carry the colour of the layer they hold.
+    // 0 BASE: quiet. Dim white everywhere so the legends read, F and J
+    // brighter as landmarks, and the six layer-tap keys (two top corners,
+    // four thumbs) in the colour of the layer they hold.
     [
-        MOU, NUM, NUM, NUM, NUM, NUM,    NUM, NUM, NUM, NUM, NUM, FUN,
-        EDT, LET, LET, LET, LET, LET,    LET, LET, LET, LET, LET, EDT,
-        MOD, LET, LET, LET, LET, LET,    LET, LET, LET, LET, LET, MOD,
-        MOD, LET, LET, LET, LET, LET,    LET, LET, LET, LET, LET, EDT,
+        MOU, DIM, DIM, DIM, DIM, DIM,    DIM, DIM, DIM, DIM, DIM, FUN,
+        DIM, DIM, DIM, DIM, DIM, DIM,    DIM, DIM, DIM, DIM, DIM, DIM,
+        DIM, DIM, DIM, DIM, WHT, DIM,    DIM, WHT, DIM, DIM, DIM, DIM,
+        DIM, DIM, DIM, DIM, DIM, DIM,    DIM, DIM, DIM, DIM, DIM, DIM,
                             MED, NAV,    SYM, NUM,
     ],
     // 1 NAV (hold Tab, second left thumb).
@@ -74,13 +80,13 @@ const COLORS: [[Rgb; NUM_KEYS]; NUM_LAYERS] = [
         ___, SYM, NUM, NUM, NUM, SYM,    ___, ___, ___, ___, ___, ___,
                             NUM, SYM,    ___, NUM,
     ],
-    // 3 MEDIA (hold Space, first left thumb). Row 1: displays/RGB off, screen
-    // brightness. Row 3: output toggle, four Bluetooth profiles, clear bond.
+    // 3 MEDIA (hold Space, first left thumb). Row 1: displays/RGB off, the
+    // computer's screen brightness, the OLED's brightness. Row 3: output toggle, four Bluetooth profiles, clear bond.
     [
         ___, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, ___,
-        ___, ___, ___, ___, ___, ___,    FUN, LET, LET, ___, ___, ___,
+        ___, ___, ___, ___, ___, ___,    FUN, WHT, WHT, WHT, WHT, ___,
         ___, MOD, MOD, MOD, MOD, ___,    ___, MED, MED, MED, MED, ___,
-        ___, ___, ___, ___, ___, ___,    LET, NAV, NAV, NAV, NAV, FUN,
+        ___, ___, ___, ___, ___, ___,    WHT, NAV, NAV, NAV, NAV, FUN,
                             MED, ___,    MED, MED,
     ],
     // 4 SYM (hold Enter, first right thumb).
