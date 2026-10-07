@@ -11,7 +11,8 @@
 //!
 //! Behavior:
 //!   - a colour per key for the active layer, from `rgb_map` (dim palette,
-//!     battery first)
+//!     battery first); the base layer is dark unless switched on from the
+//!     keyboard, which also sets its colour and the overall brightness
 //!   - when the keyboard sleeps (RMK's idle sleep, `keyboard.toml`), the
 //!     module's VCC output is switched off at P0.13, the way ZMK's ext_power
 //!     does it. Every SK6812 draws 0.5-1 mA dark, about 15 mA a half, and
@@ -25,7 +26,8 @@ use embassy_nrf::pwm::{
     Config, Instance, Prescaler, SequenceConfig, SequencePwm, SingleSequenceMode, SingleSequencer,
 };
 use embassy_time::{Duration, Timer};
-use rmk::event::{LayerChangeEvent, SleepStateEvent};
+use rmk::event::{LayerChangeEvent, LightEvent, SleepStateEvent};
+use rmk::key_light::{LightSettings, light_settings};
 use rmk::macros::processor;
 
 use crate::rgb_map::{self, NUM_LEDS, Side};
@@ -45,12 +47,15 @@ const BUF_LEN: usize = NUM_LEDS * 24 + RESET_SLOTS;
 /// (ZMK's nice!nano ext-power uses the same 50 ms).
 const RAIL_SETTLE: Duration = Duration::from_millis(50);
 
-#[processor(subscribe = [LayerChangeEvent, SleepStateEvent])]
+#[processor(subscribe = [LayerChangeEvent, SleepStateEvent, LightEvent])]
 pub struct RgbProcessor {
     pwm: SequencePwm<'static>,
     buf: [u16; BUF_LEN],
     side: Side,
     layer: u8,
+    /// Base light on/off, its colour and the brightness, set from the
+    /// keyboard (Space + 7 8 9 0); the left half sends them to the right.
+    light: LightSettings,
     /// The keyboard is asleep: lights dark and the rail off.
     sleeping: bool,
     /// P0.13, high = the module's VCC output is on.
@@ -74,6 +79,7 @@ impl RgbProcessor {
             buf: [0x8000; BUF_LEN],
             side,
             layer: 0,
+            light: light_settings(),
             sleeping: false,
             rail: Output::new(rail, Level::High, OutputDrive::Standard),
         }
@@ -81,12 +87,16 @@ impl RgbProcessor {
 
     /// Encode each key's color into the PWM duty buffer (GRB wire order).
     fn fill_buffer(&mut self) {
+        // Taken afresh for every frame: an event published before this
+        // processor subscribed (the stored settings, read at start) is not
+        // delivered, and the next frame must not show stale settings.
+        self.light = light_settings();
         let mut i = 0;
         for led in 0..NUM_LEDS {
             let (r, g, b) = if self.sleeping {
                 (0, 0, 0)
             } else {
-                rgb_map::color(self.side, self.layer, led)
+                rgb_map::color(self.side, self.layer, led, self.light)
             };
             for byte in [g, r, b] {
                 for bit in (0..8).rev() {
@@ -117,6 +127,13 @@ impl RgbProcessor {
             if !self.sleeping {
                 self.show().await;
             }
+        }
+    }
+
+    async fn on_light_event(&mut self, event: LightEvent) {
+        self.light = LightSettings::from_bits(event.0);
+        if !self.sleeping {
+            self.show().await;
         }
     }
 

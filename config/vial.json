@@ -67,6 +67,26 @@
       "name": "OLED_BRI",
       "title": "Screen one step brighter",
       "shortName": "OLED\n+"
+    },
+    {
+      "name": "LIGHT_BASE",
+      "title": "Base layer light on/off",
+      "shortName": "Base\nlight"
+    },
+    {
+      "name": "LIGHT_DIM",
+      "title": "Key lights one step dimmer",
+      "shortName": "Light\n-"
+    },
+    {
+      "name": "LIGHT_BRI",
+      "title": "Key lights one step brighter",
+      "shortName": "Light\n+"
+    },
+    {
+      "name": "LIGHT_COL",
+      "title": "Next base layer colour",
+      "shortName": "Base\ncolour"
     }
   ],
   "layouts": {

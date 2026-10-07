@@ -100,8 +100,8 @@ its own.
 ## Lights and screens
 
 Every key has a light under it, and the legends on the white keycaps show only when
-their key is lit. The base layer is dark: plain white caps, nothing to distract you and
-very little drawn from the battery. Hold a layer key and that layer's live keys light
+their key is lit. The base layer starts dark: plain white caps, nothing to distract you
+and very little drawn from the battery (you can switch it on, below). Hold a layer key and that layer's live keys light
 up, legends and all, coloured by what they do: digits green, symbols orange, arrows and
 Bluetooth profiles blue, media violet, modifiers yellow, editing keys magenta, F-keys
 and "forget pairing" red. A key that does nothing there stays dark.
@@ -112,6 +112,14 @@ and "forget pairing" red. A key that does nothing there stays dark.
   wake it.** The trackpad cannot wake a sleeping keyboard, because it has no power then;
   it responds again about a quarter of a second after the key.
 - **Space + Y** turns all lights and the screen off and on by hand (the DISPOFF layer).
+- **Space + 8** switches the base layer's light on and off. It starts off. On, every key
+  glows one colour so the legends read, and the six layer keys (the four thumbs and the
+  two top corners) show the colour of the layer they open.
+- **Space + 7** steps the base colour: white, blue, cyan, green, yellow, orange, red,
+  magenta. While Space is held, the 7 key shows the colour you are choosing and the 8 key
+  is white when the base light is on, red when it is off.
+- **Space + 9** makes all the key lights one step dimmer, **Space + 0** one step brighter
+  (five steps). These settings are remembered and apply to both halves.
 - **Space + O** makes the screen one step dimmer, **Space + P** one step brighter. There
   are five steps and the keyboard remembers the one you leave it on. The range of this
   small screen is narrow, so the steps are subtle.

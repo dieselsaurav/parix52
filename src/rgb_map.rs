@@ -10,6 +10,8 @@
 //! keys that are live on it. The key that is held to reach a layer stays lit
 //! in that layer's colour.
 
+use rmk::key_light::LightSettings;
+
 /// One colour, (r, g, b).
 pub type Rgb = (u8, u8, u8);
 
@@ -39,7 +41,7 @@ const MAX_CHANNEL: u8 = 32;
 // one or two channels; a three-channel mix at these low levels comes out
 // uneven from LED to LED. White is the exception and keeps its channels equal.
 const ___: Rgb = (0, 0, 0); //    dark: the key does nothing here
-const WHT: Rgb = (26, 26, 26); // white: brightness and output keys on MEDIA
+const WHT: Rgb = (26, 26, 26); // white: light, brightness and output keys on MEDIA
 const NAV: Rgb = (0, 10, 30); //  blue: NAV layer, arrows, Bluetooth profiles
 const NUM: Rgb = (0, 28, 0); //   green: NUM layer, digits
 const MED: Rgb = (16, 0, 30); //  violet: MEDIA layer, transport, volume
@@ -52,9 +54,17 @@ const EDT: Rgb = (30, 0, 10); //  magenta: editing keys (Tab, Esc, clipboard...)
 /// Index = layer number, then key in keyboard.toml grid order.
 #[rustfmt::skip]
 const COLORS: [[Rgb; NUM_KEYS]; NUM_LAYERS] = [
-    // 0 BASE: dark. The legends are shine-through, so the base layer shows
-    // plain white caps; lights and legends appear only while a layer is held.
-    [___; NUM_KEYS],
+    // 0 BASE. Only the six layer-tap keys are named here (two top corners,
+    // four thumbs), in the colour of the layer they hold; every other key
+    // takes the base colour chosen from the keyboard. All of it shows only
+    // while the base light is switched on (see `color`).
+    [
+        MOU, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, FUN,
+        ___, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, ___,
+        ___, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, ___,
+        ___, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, ___,
+                            MED, NAV,    SYM, NUM,
+    ],
     // 1 NAV (hold Tab, second left thumb).
     [
         ___, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, ___,
@@ -71,10 +81,12 @@ const COLORS: [[Rgb; NUM_KEYS]; NUM_LAYERS] = [
         ___, SYM, NUM, NUM, NUM, SYM,    ___, ___, ___, ___, ___, ___,
                             NUM, SYM,    ___, NUM,
     ],
-    // 3 MEDIA (hold Space, first left thumb). Row 1: displays/RGB off, the
+    // 3 MEDIA (hold Space, first left thumb). Row 0: the key lights (base
+    // colour, base on/off, dimmer, brighter); the first two show the current
+    // setting instead of white (see `color`). Row 1: displays/RGB off, the
     // computer's screen brightness, the OLED's brightness. Row 3: output toggle, four Bluetooth profiles, clear bond.
     [
-        ___, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, ___,
+        ___, ___, ___, ___, ___, ___,    ___, WHT, WHT, WHT, WHT, ___,
         ___, ___, ___, ___, ___, ___,    FUN, WHT, WHT, WHT, WHT, ___,
         ___, MOD, MOD, MOD, MOD, ___,    ___, MED, MED, MED, MED, ___,
         ___, ___, ___, ___, ___, ___,    WHT, NAV, NAV, NAV, NAV, FUN,
@@ -144,9 +156,51 @@ const fn key_index(side: Side, led: usize) -> usize {
     }
 }
 
+/// What the base layer's plain keys can be lit in; Space + 7 steps through
+/// them. Even white first, then round the colour wheel.
+const BASE_COLORS: [Rgb; rmk::key_light::BASE_COLORS as usize] = [
+    (20, 20, 20), // white
+    (0, 10, 30),  // blue
+    (0, 22, 22),  // cyan
+    (0, 28, 0),   // green
+    (24, 20, 0),  // yellow
+    (30, 10, 0),  // orange
+    (30, 0, 0),   // red
+    (30, 0, 10),  // magenta
+];
+
+/// Share of a colour that each brightness step lets through, in eighths.
+const BRIGHTNESS_EIGHTHS: [u16; rmk::key_light::BRIGHTNESS_MAX as usize + 1] = [1, 2, 3, 5, 8];
+
+const BASE_LAYER: usize = 0;
+const MEDIA_LAYER: usize = 3;
+/// On MEDIA, the keys for the base colour (Space + 7) and base on/off (Space + 8).
+const KEY_BASE_COLOR: usize = 7;
+const KEY_BASE_TOGGLE: usize = 8;
+
+fn dimmed((r, g, b): Rgb, brightness: u8) -> Rgb {
+    let eighths = BRIGHTNESS_EIGHTHS[(brightness as usize).min(BRIGHTNESS_EIGHTHS.len() - 1)];
+    // A channel that is lit at all stays lit: rounding down to 0 would
+    // change the hue at the dimmest steps.
+    let scale = |c: u8| if c == 0 { 0 } else { ((c as u16 * eighths) / 8).max(1) as u8 };
+    (scale(r), scale(g), scale(b))
+}
+
 /// Colour of LED `led` (chain position) of `side` while `layer` is on top.
-pub fn color(side: Side, layer: u8, led: usize) -> Rgb {
-    COLORS[(layer as usize).min(NUM_LAYERS - 1)][key_index(side, led)]
+pub fn color(side: Side, layer: u8, led: usize, light: LightSettings) -> Rgb {
+    let layer = (layer as usize).min(NUM_LAYERS - 1);
+    let key = key_index(side, led);
+    let base_color = BASE_COLORS[light.base_color as usize % BASE_COLORS.len()];
+    let named = COLORS[layer][key];
+    let rgb = match (layer, key) {
+        (BASE_LAYER, _) if !light.base_on => ___,
+        (BASE_LAYER, _) if named == ___ => base_color,
+        // The two base-light keys show what they are set to.
+        (MEDIA_LAYER, KEY_BASE_COLOR) => base_color,
+        (MEDIA_LAYER, KEY_BASE_TOGGLE) if !light.base_on => FUN,
+        _ => named,
+    };
+    dimmed(rgb, light.brightness)
 }
 
 // Build-time checks: the 52 LEDs of the two chains land on 52 different keys,

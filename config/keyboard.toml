@@ -154,6 +154,8 @@ No Grave       Kc1 Kc2 Kc3 Backslash       No No     No    No   No   No
 # Layer 3 — MEDIA (hold SPACE). Media transport + all Bluetooth management:
 #   User0-3 = select BT profile 0-3    User6 = clear bond of CURRENT profile
 #   User7   = toggle output USB <-> BLE  TG(7) = blank OLEDs + RGB (layer 7)
+#   User12 = base layer light on/off   User13 / User14 = key lights dimmer /
+#   brighter   User15 = next base colour (all four: vendor/rmk key_light.rs)
 #   User10 / User11 = the OLED one step dimmer / brighter (five steps, kept
 #   across power-offs; a patch in vendor/rmk, see PATCH.md)
 #   No Bootloader key. RMK's jump is a SOFT reset, the nRF52 watchdog
@@ -165,7 +167,7 @@ No Grave       Kc1 Kc2 Kc3 Backslash       No No     No    No   No   No
 [[keymap.layer]]
 name = "MEDIA"
 keys = """
-No No   No   No    No     No    No             No             No           No         No             No
+No No   No   No    No     No    No             User15         User12       User13     User14         No
 No No   No   No    No     No    TG(7)          BrightnessDown BrightnessUp User10     User11         No
 No LGui LAlt LCtrl LShift No    No             MediaPrevTrack AudioVolDown AudioVolUp MediaNextTrack No
 No No   No   No    No     No    User7          User0          User1        User2      User3          User6

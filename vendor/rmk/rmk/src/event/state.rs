@@ -60,3 +60,18 @@ impl SleepStateEvent {
 }
 
 impl_payload_wrapper!(SleepStateEvent, bool);
+
+/// PARIX PATCH: the key-light settings changed; the payload is
+/// [`crate::key_light::LightSettings`] packed into a byte.
+#[event(channel_size = crate::LIGHT_EVENT_CHANNEL_SIZE, pubs = crate::LIGHT_EVENT_PUB_SIZE, subs = crate::LIGHT_EVENT_SUB_SIZE)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, MaxSize)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct LightEvent(pub u8);
+
+impl LightEvent {
+    pub fn new(bits: u8) -> Self {
+        Self(bits)
+    }
+}
+
+impl_payload_wrapper!(LightEvent, u8);

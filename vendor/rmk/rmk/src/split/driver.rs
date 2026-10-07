@@ -205,6 +205,8 @@ impl<T: SplitReader + SplitWriter> PeripheralManager<T> {
         #[cfg(feature = "display")]
         let mut modifier_sub = crate::event::ModifierEvent::subscriber();
         let mut sleep_sub = crate::event::SleepStateEvent::subscriber();
+        // PARIX PATCH
+        let mut light_sub = crate::event::LightEvent::subscriber();
         #[cfg(feature = "dfu_split")]
         let mut dfu_sub = DfuCmdEvent::subscriber();
 
@@ -214,6 +216,15 @@ impl<T: SplitReader + SplitWriter> PeripheralManager<T> {
             .send(&SplitMessage::ConnectionStatus(
                 crate::state::current_connection_status(),
             ))
+            .await
+            .is_err()
+        {
+            return;
+        }
+
+        // PARIX PATCH: the peripheral starts with the default lights.
+        if self
+            .send(&SplitMessage::Light(crate::key_light::light_settings().to_bits()))
             .await
             .is_err()
         {
@@ -239,6 +250,7 @@ impl<T: SplitReader + SplitWriter> PeripheralManager<T> {
                         SplitMessage::ClearPeer
                     },
                     e = sleep_sub.next_event().fuse() => SplitMessage::SleepState(e.0),
+                    e = light_sub.next_event().fuse() => SplitMessage::Light(e.0),
                     with_feature("display"): e = wpm_sub.next_event().fuse() => SplitMessage::Wpm(e.0),
                     with_feature("display"): e = modifier_sub.next_event().fuse() => SplitMessage::Modifier(e.modifier.into_bits()),
                 }

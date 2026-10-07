@@ -52,6 +52,14 @@ pubs = 1
 # Each PointingDevice configured in keyboard.toml adds one (build_constants.rs).
 subs = 1
 
+# PARIX PATCH: key-light settings (rmk/src/key_light.rs). Published by the keys
+# and the store on the central and by the split link on a peripheral; read by
+# the board's LED processor and by the split driver of each peripheral.
+[event.light]
+channel_size = 2
+pubs = 2
+subs = 3
+
 # Power events
 [event.battery_status]
 channel_size = 1

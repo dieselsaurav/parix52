@@ -93,6 +93,22 @@ user-data slot 0 (`storage::store_user_data`); the display processor reads the
 slot back before its first init. Until the keys are used, the level is the
 constant in `src/status.rs`.
 
+## Key-light settings
+
+`rmk/src/key_light.rs` (new), `rmk/src/event/state.rs` (`LightEvent`),
+`rmk/src/keyboard.rs` (`process_user`, `run`), `rmk/src/split/mod.rs`,
+`driver.rs`, `peripheral.rs` (`SplitMessage::Light`), `rmk-config`
+(`[event.light]` in `event_default.toml`, `lib.rs`, `build_constants.rs`).
+
+The LEDs are driven by the board's own processor (`src/rgb.rs`); RMK's part
+is the settings. `User12` toggles the base layer's light, `User13` / `User14`
+step the brightness, `User15` steps the base colour. The central keeps the
+packed byte in user-data slot 1, reads it back when the keyboard task starts,
+publishes every change as `LightEvent`, and the split driver sends it to the
+peripheral at connection and on each change; the peripheral republishes it.
+Not to be confused with upstream's `rmk/src/light.rs`, which is the lock-LED
+indicator code.
+
 ## Battery level
 
 `rmk/src/input_device/battery.rs`.

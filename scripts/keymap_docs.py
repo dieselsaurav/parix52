@@ -55,6 +55,7 @@ KEYCODE_DISPLAY: dict[str, str] = {
     "User0": "BT 1", "User1": "BT 2", "User2": "BT 3", "User3": "BT 4",
     "User4": "BT next", "User5": "BT prev", "User6": "BT clear", "User7": "USB/BT",
     "User10": "OLED -", "User11": "OLED +",
+    "User12": "Base light", "User13": "Light -", "User14": "Light +", "User15": "Base colour",
     "LGui": "Cmd", "RGui": "Cmd", "LAlt": "Opt", "RAlt": "Opt",
     "LCtrl": "Ctrl", "RCtrl": "Ctrl", "LShift": "Shift", "RShift": "Shift",
     "No": "", "_______": "",

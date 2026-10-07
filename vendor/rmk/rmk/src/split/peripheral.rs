@@ -168,6 +168,8 @@ impl<S: SplitWriter + SplitReader> SplitPeripheral<S> {
                         SplitMessage::SleepState(sleeping) => {
                             publish_event(SleepStateEvent::new(sleeping));
                         }
+                        // PARIX PATCH
+                        SplitMessage::Light(bits) => crate::key_light::apply(bits),
                         // --- dfu_split: firmware update handlers ---
                         #[cfg(feature = "dfu_split")]
                         SplitMessage::FirmwareHashQuery => {

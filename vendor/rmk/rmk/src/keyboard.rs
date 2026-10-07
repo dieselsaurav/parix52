@@ -141,6 +141,9 @@ impl Runnable for Keyboard<'_> {
     /// Main keyboard processing task, it receives input devices result, processes keys.
     /// The report is sent using `send_report`.
     async fn run(&mut self) -> ! {
+        // PARIX PATCH: the light settings the keys last left.
+        #[cfg(feature = "storage")]
+        crate::key_light::load().await;
         loop {
             // Wait for the next event, but wake up at the earliest pending deadline.
             // `with_deadline` polls the subscriber first, so a queued event is handled first.
@@ -1633,6 +1636,10 @@ impl<'a> Keyboard<'a> {
         #[cfg(feature = "display")]
         if event.pressed && (id == 10 || id == 11) {
             crate::display::step_display_brightness(id == 11).await;
+        }
+        // PARIX PATCH: User12..User15 are the key-light keys (key_light.rs).
+        if event.pressed {
+            crate::key_light::key_pressed(id).await;
         }
 
         #[cfg(feature = "_ble")]

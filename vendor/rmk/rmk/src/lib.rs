@@ -121,6 +121,7 @@ pub mod processor;
 #[cfg(feature = "split")]
 pub mod split;
 pub mod state;
+pub mod key_light;
 #[cfg(feature = "storage")]
 pub mod storage;
 #[cfg(not(feature = "_no_usb"))]
