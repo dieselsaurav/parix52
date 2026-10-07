@@ -56,6 +56,11 @@ pub struct RgbProcessor {
     /// Base light on/off, its colour and the brightness, set from the
     /// keyboard (Space + Y U O P); the left half sends them to the right.
     light: LightSettings,
+    /// A light key was just pressed with the base light on: show the base
+    /// layer as it will look, in place of the layer the key sits on, until
+    /// the layer changes (the layer key is let go). Otherwise the change
+    /// could only be seen after releasing Space.
+    preview: bool,
     /// The keyboard is asleep: lights dark and the rail off.
     sleeping: bool,
     /// P0.13, high = the module's VCC output is on.
@@ -80,6 +85,7 @@ impl RgbProcessor {
             side,
             layer: 0,
             light: light_settings(),
+            preview: false,
             sleeping: false,
             rail: Output::new(rail, Level::High, OutputDrive::Standard),
         }
@@ -91,12 +97,13 @@ impl RgbProcessor {
         // processor subscribed (the stored settings, read at start) is not
         // delivered, and the next frame must not show stale settings.
         self.light = light_settings();
+        let layer = if self.preview { 0 } else { self.layer };
         let mut i = 0;
         for led in 0..NUM_LEDS {
             let (r, g, b) = if self.sleeping {
                 (0, 0, 0)
             } else {
-                rgb_map::color(self.side, self.layer, led, self.light)
+                rgb_map::color(self.side, layer, led, self.light)
             };
             for byte in [g, r, b] {
                 for bit in (0..8).rev() {
@@ -122,8 +129,9 @@ impl RgbProcessor {
     }
 
     async fn on_layer_change_event(&mut self, event: LayerChangeEvent) {
-        if event.0 != self.layer {
+        if event.0 != self.layer || self.preview {
             self.layer = event.0;
+            self.preview = false;
             if !self.sleeping {
                 self.show().await;
             }
@@ -132,6 +140,7 @@ impl RgbProcessor {
 
     async fn on_light_event(&mut self, event: LightEvent) {
         self.light = LightSettings::from_bits(event.0);
+        self.preview = self.light.base_on;
         if !self.sleeping {
             self.show().await;
         }

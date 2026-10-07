@@ -126,8 +126,9 @@ All the controls are on the right hand while you hold **Space**, one subject per
 | J K L ' | Previous track, volume down, volume up, next track |
 | right thumbs | Play / pause, mute |
 
-While Space is held, the Y key is white when the base light is on and red when it is
-off, and the U key shows the colour you are choosing. The light and screen settings are
+Press one of the light keys and, while you keep Space held, the whole keyboard shows
+the base layer as it will look, so you see the colour and brightness change as you
+step. With the base light off, the Y key is red. The light and screen settings are
 remembered across power-offs and apply to both halves.
 
 The left half has a small screen (the right has the trackpad in its place):
