@@ -57,6 +57,11 @@ pub trait PointingDriver {
     fn take_wheel(&mut self) -> i16 {
         0
     }
+    /// Mouse buttons to click once (bit 0 = left), for drivers that detect
+    /// taps themselves.
+    fn take_clicks(&mut self) -> u8 {
+        0
+    }
     async fn set_resolution(&mut self, _cpi: u16) -> Result<(), PointingDriverError> {
         debug!("set_resolution() is not implemented for this sensor.");
         Err(PointingDriverError::NotImplementedError)
@@ -94,6 +99,7 @@ pub struct PointingDevice<S: PointingDriver> {
     pub accumulated_x: i32,
     pub accumulated_y: i32,
     pub accumulated_wheel: i32,
+    pub accumulated_clicks: u8,
 }
 
 impl<S: PointingDriver> PointingDevice<S> {
@@ -149,6 +155,7 @@ impl<S: PointingDriver> PointingDevice<S> {
                 self.accumulated_x = self.accumulated_x.saturating_add(motion.dx as i32);
                 self.accumulated_y = self.accumulated_y.saturating_add(motion.dy as i32);
                 self.accumulated_wheel = self.accumulated_wheel.saturating_add(self.sensor.take_wheel() as i32);
+                self.accumulated_clicks |= self.sensor.take_clicks();
             }
             Err(_e) => {
                 warn!("PointingDevice {}: Read motion error", self.id);
@@ -157,8 +164,32 @@ impl<S: PointingDriver> PointingDevice<S> {
     }
 
     fn take_report_event(&mut self) -> Option<PointingEvent> {
-        if self.accumulated_x == 0 && self.accumulated_y == 0 && self.accumulated_wheel == 0 {
+        if self.accumulated_x == 0 && self.accumulated_y == 0 && self.accumulated_wheel == 0 && self.accumulated_clicks == 0
+        {
             return None;
+        }
+
+        // A click travels alone, in the third slot; motion and wheel that came
+        // with it wait for the next report.
+        if self.accumulated_clicks != 0 {
+            let clicks = core::mem::take(&mut self.accumulated_clicks);
+            let zero = |axis| AxisEvent {
+                typ: AxisValType::Rel,
+                axis,
+                value: 0,
+            };
+            return Some(PointingEvent {
+                device_id: self.id,
+                axes: [
+                    zero(Axis::X),
+                    zero(Axis::Y),
+                    AxisEvent {
+                        typ: AxisValType::Rel,
+                        axis: Axis::Button,
+                        value: clicks as i16,
+                    },
+                ],
+            });
         }
 
         let dx = self.accumulated_x.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
@@ -255,7 +286,11 @@ impl<S: PointingDriver> PointingDevice<S> {
             };
 
             let report_wait = async {
-                if self.accumulated_x != 0 || self.accumulated_y != 0 || self.accumulated_wheel != 0 {
+                if self.accumulated_x != 0
+                    || self.accumulated_y != 0
+                    || self.accumulated_wheel != 0
+                    || self.accumulated_clicks != 0
+                {
                     Timer::after(
                         self.report_interval
                             .checked_sub(self.last_report.elapsed())
@@ -606,14 +641,37 @@ impl<'a> PointingProcessor<'a> {
         let mut x = 0i16;
         let mut y = 0i16;
         let mut z = 0i16;
+        let mut click = 0u8;
 
         for axis_event in event.axes.iter() {
             match axis_event.axis {
                 Axis::X => x = axis_event.value,
                 Axis::Y => y = axis_event.value,
                 Axis::Z => z = axis_event.value,
+                Axis::Button => click = axis_event.value as u8,
                 _ => {}
             }
+        }
+
+        // A tap on the pad: press and release, with whatever the keymap is
+        // already holding. The release is queued, not tried, so a button can
+        // never be left down.
+        if click != 0 {
+            self.touch_auto_layer();
+            let held = self.keymap.mouse_buttons();
+            let report = |buttons| {
+                Report::MouseReport(MouseReport {
+                    buttons,
+                    x: 0,
+                    y: 0,
+                    wheel: 0,
+                    pan: 0,
+                })
+            };
+            send_hid_report(report(held | click)).await;
+            Timer::after(Duration::from_millis(20)).await;
+            send_hid_report(report(held)).await;
+            return;
         }
 
         if x != 0 || y != 0 || z != 0 {
@@ -968,6 +1026,7 @@ mod tests {
             accumulated_x: 0,
             accumulated_y: 0,
             accumulated_wheel: 0,
+            accumulated_clicks: 0,
         };
 
         let mut result = false;
@@ -1011,6 +1070,7 @@ mod tests {
             accumulated_x: 0,
             accumulated_y: 0,
             accumulated_wheel: 0,
+            accumulated_clicks: 0,
         };
 
         // Run the async try_init
@@ -1045,6 +1105,7 @@ mod tests {
             accumulated_x: 0,
             accumulated_y: 0,
             accumulated_wheel: 0,
+            accumulated_clicks: 0,
         };
 
         let inited = block_on(device.try_init());
@@ -1079,6 +1140,7 @@ mod tests {
             accumulated_x: 0,
             accumulated_y: 0,
             accumulated_wheel: 0,
+            accumulated_clicks: 0,
             id: 1,
         };
 
@@ -1116,6 +1178,7 @@ mod tests {
             accumulated_x: 0,
             accumulated_y: 0,
             accumulated_wheel: 0,
+            accumulated_clicks: 0,
         };
 
         let start = Instant::now();

@@ -117,6 +117,12 @@ pub struct PinnacleConfig {
     /// relative mode is roughly this divisor's worth coarser than its
     /// absolute coordinates.
     pub cursor_divisor: u8,
+    /// Tap to click: a touch shorter than `tap_term_ms` that stays within
+    /// about 1.5 mm of where it landed is a left click. Needs absolute mode
+    /// (`scroll_ring`).
+    pub tap: bool,
+    /// Longest touch that still counts as a tap, in milliseconds.
+    pub tap_term_ms: u16,
 }
 
 impl Default for PinnacleConfig {
@@ -131,9 +137,35 @@ impl Default for PinnacleConfig {
             ring_degrees_per_tick: 15,
             ring_invert: false,
             cursor_divisor: 3,
+            tap: false,
+            tap_term_ms: 200,
         }
     }
 }
+
+/// What the touch in progress is, decided once and kept until lift-off.
+#[derive(Clone, Copy, PartialEq)]
+enum Gesture {
+    /// No finger on the pad.
+    None,
+    /// Landed in the scroll ring and has not moved far enough to tell a
+    /// scroll (along the ring) from a cursor move that began at the edge
+    /// (across it). The cursor is held still meanwhile. Start point kept in
+    /// normalised coordinates.
+    Deciding { fx: f32, fy: f32 },
+    Scroll,
+    Cursor,
+}
+
+/// How far a finger that landed in the ring must travel before the gesture
+/// is decided, as a fraction of the pad's radius (QMK: 16 of 128).
+const RING_DECIDE_TRAVEL: f32 = 0.125;
+/// A ring touch is a scroll when its travel is at least 50 degrees off the
+/// radial direction, as in QMK; cos(50 deg) squared.
+const RING_RADIAL_COS2: f32 = 0.4132;
+/// A tap may wander this far from where it landed, in pad units (about
+/// 45 to the millimetre).
+const TAP_MAX_TRAVEL: i32 = 70;
 
 /// Angle of (x, y) in degrees, 0..360, atan2 without libm: an octant-folded
 /// polynomial, within 0.3 degrees, more than enough for a scroll ring.
@@ -258,7 +290,14 @@ pub struct Pinnacle<SPI: SpiBus, CS: ChipSelect, DR: InputPin + Wait> {
     /// Absolute mode: last finger position (pad units) and whether it was
     /// in the ring, to turn positions into cursor deltas and ring angles.
     last_pos: Option<(i32, i32)>,
-    last_in_ring: bool,
+    gesture: Gesture,
+    /// Where and when the touch in progress landed, and whether it has left
+    /// the tap radius since: what decides a tap at lift-off.
+    touch_start: (i32, i32),
+    touch_started: Instant,
+    touch_moved: bool,
+    /// Buttons to click, set at the lift-off of a tap.
+    click_pending: u8,
     last_angle: f32,
     ring_acc: f32,
     cursor_rem: (i32, i32),
@@ -286,7 +325,11 @@ where
             dr,
             config,
             last_pos: None,
-            last_in_ring: false,
+            gesture: Gesture::None,
+            touch_start: (0, 0),
+            touch_started: Instant::MIN,
+            touch_moved: false,
+            click_pending: 0,
             last_angle: 0.0,
             ring_acc: 0.0,
             cursor_rem: (0, 0),
@@ -300,71 +343,127 @@ where
 
     /// One absolute packet (X, Y, Z) turned into cursor deltas, with the
     /// ring band producing wheel ticks instead. Z == 0 is lift-off.
+    /// Count ring travel from `last_angle` to `angle` into wheel ticks.
+    fn ring_advance(&mut self, angle: f32) {
+        let mut d = angle - self.last_angle;
+        if d > 180.0 {
+            d -= 360.0;
+        } else if d < -180.0 {
+            d += 360.0;
+        }
+        self.ring_acc += d;
+        let step = self.config.ring_degrees_per_tick.max(1) as f32;
+        while self.ring_acc >= step {
+            self.ring_acc -= step;
+            // anticlockwise = scroll up (+), clockwise = down (-)
+            self.wheel_pending += if self.config.ring_invert { -1 } else { 1 };
+        }
+        while self.ring_acc <= -step {
+            self.ring_acc += step;
+            self.wheel_pending += if self.config.ring_invert { 1 } else { -1 };
+        }
+        self.last_angle = angle;
+    }
+
+    /// The finger left the pad: a short touch that stayed put is a tap.
+    fn lift(&mut self, now: Instant) {
+        if self.config.tap
+            && self.gesture != Gesture::None
+            && self.gesture != Gesture::Scroll
+            && !self.touch_moved
+            && now.saturating_duration_since(self.touch_started)
+                <= Duration::from_millis(self.config.tap_term_ms as u64)
+        {
+            self.click_pending |= 0x01;
+        }
+        self.gesture = Gesture::None;
+        self.last_pos = None;
+        self.ring_acc = 0.0;
+        self.cursor_rem = (0, 0);
+    }
+
+    /// One absolute packet (X, Y, Z) turned into cursor deltas, wheel ticks
+    /// from the ring, and a click from a tap. Z == 0 or (0, 0) is lift-off.
     fn absolute_to_motion(&mut self, x: u16, y: u16, z: u8) -> MotionData {
         // Lift-off: Cirque's idle packets carry (0, 0); QMK keys on that, Z
         // alone proved unreliable. A long silence also ends the touch, so a
-        // missed idle packet cannot leave the gesture latched.
+        // missed idle packet cannot leave the gesture latched; no tap is
+        // credited then, since the lift was not seen.
         let now = Instant::now();
         let silent = now.saturating_duration_since(self.last_packet) > Duration::from_millis(150);
         self.last_packet = now;
-        if z == 0 || (x == 0 && y == 0) || silent {
+        if z == 0 || (x == 0 && y == 0) {
+            self.lift(now);
+            return MotionData::default();
+        }
+        if silent {
+            self.gesture = Gesture::None;
             self.last_pos = None;
-            self.last_in_ring = false;
             self.ring_acc = 0.0;
             self.cursor_rem = (0, 0);
-            if z == 0 || (x == 0 && y == 0) {
-                return MotionData::default();
-            }
         }
+
+        let (xi, yi) = (x as i32, y as i32);
         let fx = (x as f32 - ABS_CENTER_X) / ABS_HALF_W;
         let fy = (y as f32 - ABS_CENTER_Y) / ABS_HALF_H;
-        let r2 = fx * fx + fy * fy;
-        let ring_inner = 1.0 - self.config.ring_width_percent as f32 / 100.0;
-        // The gesture is decided where the touch begins and kept until
-        // lift-off: a scroll stays a scroll when the finger dips inside the
-        // band, and a cursor move stays a cursor move when it reaches the edge.
-        let in_ring = match self.last_pos {
-            None => self.config.scroll_ring && r2 >= ring_inner * ring_inner,
-            Some(_) => self.last_in_ring,
-        };
-
         let mut out = MotionData::default();
-        if in_ring {
-            // Screen y grows downward, so negate fy for a conventional angle.
-            let angle = angle_deg(fx, -fy);
-            if self.last_in_ring {
-                let mut d = angle - self.last_angle;
-                if d > 180.0 {
-                    d -= 360.0;
-                } else if d < -180.0 {
-                    d += 360.0;
-                }
-                self.ring_acc += d;
-                let step = self.config.ring_degrees_per_tick.max(1) as f32;
-                while self.ring_acc >= step {
-                    self.ring_acc -= step;
-                    // anticlockwise = scroll up (+), clockwise = down (-)
-                    self.wheel_pending += if self.config.ring_invert { -1 } else { 1 };
-                }
-                while self.ring_acc <= -step {
-                    self.ring_acc += step;
-                    self.wheel_pending += if self.config.ring_invert { 1 } else { -1 };
+
+        if self.gesture == Gesture::None {
+            // Touch-down: nothing moves on the first packet.
+            let ring_inner = 1.0 - self.config.ring_width_percent as f32 / 100.0;
+            let in_ring = self.config.scroll_ring && fx * fx + fy * fy >= ring_inner * ring_inner;
+            self.gesture = if in_ring { Gesture::Deciding { fx, fy } } else { Gesture::Cursor };
+            self.touch_start = (xi, yi);
+            self.touch_started = now;
+            self.touch_moved = false;
+            self.last_pos = Some((xi, yi));
+            return out;
+        }
+
+        let (tx, ty) = (xi - self.touch_start.0, yi - self.touch_start.1);
+        if tx * tx + ty * ty > TAP_MAX_TRAVEL * TAP_MAX_TRAVEL {
+            self.touch_moved = true;
+        }
+
+        if let Gesture::Deciding { fx: sx, fy: sy } = self.gesture {
+            // Travel along the ring is a scroll; travel across it is a cursor
+            // move that happened to begin at the edge. Compare the travel
+            // with the radial direction at the starting point.
+            let (mx, my) = (fx - sx, fy - sy);
+            let m2 = mx * mx + my * my;
+            if m2 >= RING_DECIDE_TRAVEL * RING_DECIDE_TRAVEL {
+                let dot = mx * sx + my * sy;
+                let radial = dot * dot > RING_RADIAL_COS2 * m2 * (sx * sx + sy * sy);
+                if radial {
+                    self.gesture = Gesture::Cursor;
+                } else {
+                    self.gesture = Gesture::Scroll;
+                    // Count the travel made while deciding as well.
+                    self.last_angle = angle_deg(sx, -sy);
+                    self.ring_acc = 0.0;
                 }
             }
-            self.last_angle = angle;
-            self.cursor_rem = (0, 0);
-        } else if let Some((lx, ly)) = self.last_pos
-            && !self.last_in_ring
-        {
-            let div = self.config.cursor_divisor.max(1) as i32;
-            let ax = x as i32 - lx + self.cursor_rem.0;
-            let ay = y as i32 - ly + self.cursor_rem.1;
-            out.dx = (ax / div) as i16;
-            out.dy = (ay / div) as i16;
-            self.cursor_rem = (ax % div, ay % div);
         }
-        self.last_pos = Some((x as i32, y as i32));
-        self.last_in_ring = in_ring;
+
+        match self.gesture {
+            Gesture::Scroll => {
+                // Screen y grows downward, so negate fy for a conventional angle.
+                self.ring_advance(angle_deg(fx, -fy));
+                self.cursor_rem = (0, 0);
+            }
+            Gesture::Cursor => {
+                if let Some((lx, ly)) = self.last_pos {
+                    let div = self.config.cursor_divisor.max(1) as i32;
+                    let ax = xi - lx + self.cursor_rem.0;
+                    let ay = yi - ly + self.cursor_rem.1;
+                    out.dx = (ax / div) as i16;
+                    out.dy = (ay / div) as i16;
+                    self.cursor_rem = (ax % div, ay % div);
+                }
+            }
+            Gesture::Deciding { .. } | Gesture::None => {}
+        }
+        self.last_pos = Some((xi, yi));
         out
     }
 
@@ -589,6 +688,10 @@ where
         core::mem::take(&mut self.wheel_pending)
     }
 
+    fn take_clicks(&mut self) -> u8 {
+        core::mem::take(&mut self.click_pending)
+    }
+
     /// The keyboard sleeps or wakes. On this board the pad hangs off the
     /// module's switched VCC rail, which is turned off for the sleep, so:
     /// going down, chip select is parked low and the pad is left alone (a
@@ -617,7 +720,8 @@ where
         Timer::after(Duration::from_millis(100)).await;
         self.cs.drive_high();
         self.last_pos = None;
-        self.last_in_ring = false;
+        self.gesture = Gesture::None;
+        self.click_pending = 0;
         self.ring_acc = 0.0;
         self.cursor_rem = (0, 0);
         self.wheel_pending = 0;
@@ -681,6 +785,7 @@ where
             accumulated_x: 0,
             accumulated_y: 0,
             accumulated_wheel: 0,
+            accumulated_clicks: 0,
         }
     }
 }

@@ -1404,6 +1404,12 @@ pub struct PinnacleConfig {
     /// Absolute-mode cursor speed: pad units per cursor count. Default 3.
     #[serde(default = "default_cursor_divisor")]
     pub cursor_divisor: u8,
+    /// Tap to click (left button). Needs `scroll_ring` (absolute mode).
+    #[serde(default)]
+    pub tap: bool,
+    /// Longest touch that still counts as a tap, in milliseconds. Default 200.
+    #[serde(default = "default_tap_term_ms")]
+    pub tap_term_ms: u16,
     /// Report rate (Hz). Motion is accumulated and emitted at this rate.
     #[serde(default = "default_pointing_report_hz")]
     pub report_hz: u16,
@@ -1437,6 +1443,10 @@ const fn default_ring_degrees_per_tick() -> u8 {
 
 const fn default_cursor_divisor() -> u8 {
     3
+}
+
+const fn default_tap_term_ms() -> u16 {
+    200
 }
 
 /// Azoteq IQS5xx trackpad configuration.

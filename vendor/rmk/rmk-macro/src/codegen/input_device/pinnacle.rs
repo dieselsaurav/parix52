@@ -57,6 +57,8 @@ pub(crate) fn expand_pinnacle_device(
         let ring_degrees_per_tick = pad.ring_degrees_per_tick;
         let ring_invert = pad.ring_invert;
         let cursor_divisor = pad.cursor_divisor;
+        let tap = pad.tap;
+        let tap_term_ms = pad.tap_term_ms;
         let report_hz = pad.report_hz;
         let proc_invert_x = pad.proc_invert_x;
         let proc_invert_y = pad.proc_invert_y;
@@ -91,6 +93,8 @@ pub(crate) fn expand_pinnacle_device(
                     ring_degrees_per_tick: #ring_degrees_per_tick,
                     ring_invert: #ring_invert,
                     cursor_divisor: #cursor_divisor,
+                    tap: #tap,
+                    tap_term_ms: #tap_term_ms,
                 };
 
                 PointingDevice::<Pinnacle<_, _, _>>::with_report_hz(#id, spi_bus, cs, dr, config, #report_hz)

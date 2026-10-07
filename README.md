@@ -76,17 +76,18 @@ the old pairing.
 
 The right half carries a 40 mm Cirque trackpad.
 
-- **Pointer:** touch and move in the middle of the pad.
-- **Scroll:** touch the **outer ring** (the outer quarter of the pad's radius) and run
-  your finger around it, like a wheel. Clockwise scrolls down. Whether a touch is a
-  pointer move or a scroll is decided where your finger lands and stays that way until
-  you lift it.
-- **Clicking:** moving the pointer switches the keyboard to the MOUSE layer for about
-  two-thirds of a second after the last movement. While it is on, the right thumb keys
-  are the mouse buttons: **Enter = left click, Backspace = right click**, and the
-  right home row moves the pointer in steps, the row below it scrolls. The lights turn
+- **Pointer:** touch and move anywhere on the pad.
+- **Click:** tap the pad (a touch shorter than a fifth of a second that stays where it
+  landed) for a left click.
+- **Scroll:** land on the **outer ring** (the outer fifth of the pad's radius, about
+  4 mm) and run your finger around it, like a wheel. Clockwise scrolls down. A touch
+  that lands on the ring and moves towards the middle instead is an ordinary pointer
+  move, so starting a move from the edge does not scroll.
+- **Other buttons:** moving the pointer switches the keyboard to the MOUSE layer for
+  about two-thirds of a second after the last movement. While it is on, the right thumb
+  keys are mouse buttons, **Enter = left click, Backspace = right click**, the right
+  home row moves the pointer in steps and the row below it scrolls. The lights turn
   cyan while this layer is on. You can also hold `` ` `` to reach the same layer.
-- Tapping the pad is not a click.
 - After a minute without any key or pointer move the keyboard sleeps and the pad is
   switched off with the lights: press any key first, then use the pad.
 

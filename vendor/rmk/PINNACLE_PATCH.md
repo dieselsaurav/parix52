@@ -28,3 +28,18 @@ TOML:
     sck = "P0_20"; mosi = "P0_17"; miso = "P1_06"; cs = "P0_06"
 
 Working on hardware since 2026-10-01 (DR pin, absolute mode with scroll ring, auto mouse layer); re-ported onto upstream 775a767 on 2026-10-06.
+
+## Gestures (absolute mode)
+
+Decided once per touch, in `absolute_to_motion`:
+
+- **Tap** (`tap`, `tap_term_ms`): a touch no longer than the term that stays
+  within about 1.5 mm of where it landed is a left click, sent as its own
+  pointing event (`Axis::Button`, a button mask) and turned into a press and a
+  release by the pointing processor.
+- **Scroll ring** (`ring_width_percent`): a touch that lands in the outer band
+  is undecided, and the cursor held still, until it has travelled an eighth of
+  the radius. Travel within 50 degrees of the radial direction makes it a
+  cursor move; anything more tangential makes it a scroll. The numbers are
+  QMK's (`cirque_pinnacle_gestures.c`: trigger 16 of 128, 50 degrees); QMK's
+  ring is a third of the radius, this one a fifth.

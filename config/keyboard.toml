@@ -339,14 +339,20 @@ dr = "P0_09"
 # right thumbs become left / right click, right home row the wheel keys.
 auto_layer = 6
 auto_layer_timeout_ms = 650
-# Scroll ring: the outer 25 % of the pad (a 5 mm band) is a wheel, one tick
-# per 15 degrees, clockwise = scroll down. The gesture is fixed where the
-# touch begins. The pad runs in absolute mode for this and the cursor speed
-# comes from cursor_divisor (higher = slower).
+# Scroll ring: the outer 20 % of the pad (a 4 mm band) is a wheel, one tick
+# per 15 degrees, clockwise = scroll down. A touch that lands in the band
+# becomes a scroll only once it has travelled along the ring; travelling
+# across it, towards the centre, makes it an ordinary cursor move. The pad
+# runs in absolute mode for this and the cursor speed comes from
+# cursor_divisor (higher = slower).
 scroll_ring = true
-ring_width_percent = 25
+ring_width_percent = 20
 ring_degrees_per_tick = 15
 cursor_divisor = 3
+# Tap to click: a touch under 200 ms that stays where it landed is a left
+# click. Right click stays on the Backspace thumb while the pad is in use.
+tap = true
+tap_term_ms = 200
 proc_swap_xy = true
 proc_invert_x = false
 proc_invert_y = true

@@ -164,6 +164,9 @@ pub enum Axis {
     Z,
     H,
     V,
+    /// PARIX PATCH: not an axis: a bit mask of mouse buttons to click once
+    /// (press and release), from a device that detects taps itself.
+    Button,
     // .. More is allowed
 }
 
