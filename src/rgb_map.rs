@@ -35,13 +35,11 @@ const MAX_CHANNEL: u8 = 32;
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 // Three-letter names so the grids below line up. The keycaps are white with
-// shine-through legends: an unlit key shows no legend at all, so a key is
-// dark only where it does nothing. Every hue uses one or two channels; a
-// three-channel mix at these low levels comes out uneven from LED to LED.
-// The two whites are the exception and keep their channels equal.
+// shine-through legends: an unlit key shows no legend at all. Every hue uses
+// one or two channels; a three-channel mix at these low levels comes out
+// uneven from LED to LED. White is the exception and keeps its channels equal.
 const ___: Rgb = (0, 0, 0); //    dark: the key does nothing here
-const DIM: Rgb = (10, 10, 10); // dim white: every plain key on BASE, enough to read the legend
-const WHT: Rgb = (26, 26, 26); // white: F and J on BASE, brightness and output keys on MEDIA
+const WHT: Rgb = (26, 26, 26); // white: brightness and output keys on MEDIA
 const NAV: Rgb = (0, 10, 30); //  blue: NAV layer, arrows, Bluetooth profiles
 const NUM: Rgb = (0, 28, 0); //   green: NUM layer, digits
 const MED: Rgb = (16, 0, 30); //  violet: MEDIA layer, transport, volume
@@ -54,16 +52,9 @@ const EDT: Rgb = (30, 0, 10); //  magenta: editing keys (Tab, Esc, clipboard...)
 /// Index = layer number, then key in keyboard.toml grid order.
 #[rustfmt::skip]
 const COLORS: [[Rgb; NUM_KEYS]; NUM_LAYERS] = [
-    // 0 BASE: quiet. Dim white everywhere so the legends read, F and J
-    // brighter as landmarks, and the six layer-tap keys (two top corners,
-    // four thumbs) in the colour of the layer they hold.
-    [
-        MOU, DIM, DIM, DIM, DIM, DIM,    DIM, DIM, DIM, DIM, DIM, FUN,
-        DIM, DIM, DIM, DIM, DIM, DIM,    DIM, DIM, DIM, DIM, DIM, DIM,
-        DIM, DIM, DIM, DIM, WHT, DIM,    DIM, WHT, DIM, DIM, DIM, DIM,
-        DIM, DIM, DIM, DIM, DIM, DIM,    DIM, DIM, DIM, DIM, DIM, DIM,
-                            MED, NAV,    SYM, NUM,
-    ],
+    // 0 BASE: dark. The legends are shine-through, so the base layer shows
+    // plain white caps; lights and legends appear only while a layer is held.
+    [___; NUM_KEYS],
     // 1 NAV (hold Tab, second left thumb).
     [
         ___, ___, ___, ___, ___, ___,    ___, ___, ___, ___, ___, ___,

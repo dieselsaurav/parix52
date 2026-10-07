@@ -100,12 +100,11 @@ its own.
 ## Lights and screens
 
 Every key has a light under it, and the legends on the white keycaps show only when
-their key is lit. On the base layer every key glows a dim white, F and J a little
-brighter so your index fingers find home, and the six layer keys (the four thumbs and
-the two top corners) in the colour of the layer they open. Hold a layer key and only
-that layer's live keys stay lit, coloured by what they do: digits green, symbols orange,
-arrows and Bluetooth profiles blue, media violet, modifiers yellow, editing keys
-magenta, F-keys and "forget pairing" red. A key that does nothing there goes dark.
+their key is lit. The base layer is dark: plain white caps, nothing to distract you and
+very little drawn from the battery. Hold a layer key and that layer's live keys light
+up, legends and all, coloured by what they do: digits green, symbols orange, arrows and
+Bluetooth profiles blue, media violet, modifiers yellow, editing keys magenta, F-keys
+and "forget pairing" red. A key that does nothing there stays dark.
 
 - After **one minute** without a key or a pointer move on either half, the keyboard
   sleeps: the supply to the lights, the screen and the trackpad is switched off
