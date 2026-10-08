@@ -101,8 +101,8 @@ its own.
 ## Lights and screens
 
 Every key has a light under it, and the legends on the white keycaps show only when
-their key is lit. The base layer starts dark: plain white caps, nothing to distract you
-and very little drawn from the battery (you can switch it on, below). Hold a layer key and that layer's live keys light
+their key is lit. The base layer starts as a rainbow sweeping across both halves; you
+can change it to a solid colour or switch it off, which saves the most battery (below). Hold a layer key and that layer's live keys light
 up, legends and all, coloured by what they do: digits green, symbols orange, arrows and
 Bluetooth profiles blue, media violet, modifiers yellow, editing keys magenta, F-keys
 and "everything dark" red. A key that does nothing there stays dark.
@@ -120,7 +120,7 @@ All the controls are on the right hand while you hold **Space**, one subject per
 |---|---|
 | 7 / 8 | Computer screen dimmer / brighter |
 | 9 / 0 | The keyboard's own screen dimmer / brighter (five subtle steps) |
-| Y | Base layer light on / off. It starts off. On, every key glows one colour so the legends read, and the six layer keys show the colour of the layer they open |
+| Y | Base layer light on / off. A new or freshly updated keyboard starts with it on, showing the rainbow. With a solid colour, every key glows that colour and the six layer keys show the colour of the layer they open |
 | U | Next base look: white, blue, cyan, green, yellow, orange, red, magenta, then a rainbow that sweeps across both halves |
 | O / P | All key lights dimmer / brighter (eight steps). The top steps are bright and shorten battery life noticeably while the base light is on |
 | H | Everything dark, lights and screen, until you press it again |

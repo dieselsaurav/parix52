@@ -41,11 +41,13 @@ pub struct LightSettings {
 }
 
 impl LightSettings {
-    /// Base layer dark, first colour, a brightness two steps under the top.
+    /// What a keyboard shows until the light keys are first used: the base
+    /// layer lit in the last look (the board's rainbow), two steps under the
+    /// top brightness.
     pub const DEFAULT: Self = Self {
-        base_on: false,
+        base_on: true,
         brightness: BRIGHTNESS_MAX - 2,
-        base_color: 0,
+        base_color: BASE_COLORS - 1,
         idle: false,
     };
 
