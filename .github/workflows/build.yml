@@ -23,6 +23,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # p256-cortex-m4-sys (pulled in by RMK's BLE pairing since the 0.10
+      # upgrade) assembles its curve code with the ARM GCC, which the runner
+      # does not ship.
+      - name: Install the ARM GCC
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+
       - name: Install cargo-make
         run: cargo install cargo-make
 
