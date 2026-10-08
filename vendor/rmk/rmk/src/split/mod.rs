@@ -65,7 +65,7 @@ pub(crate) enum SplitMessage {
     /// Sleep state from central to peripheral.
     SleepState(bool),
     /// PARIX PATCH: key-light settings from central to peripheral (key_light.rs).
-    Light(u8),
+    Light(u16),
     /// Battery status, from peripheral to central
     #[cfg(feature = "_ble")]
     BatteryStatus(BatteryStatusEvent),

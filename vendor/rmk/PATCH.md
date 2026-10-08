@@ -106,6 +106,12 @@ step the brightness, `User15` steps the base colour. The central keeps the
 packed byte in user-data slot 1, reads it back when the keyboard task starts,
 publishes every change as `LightEvent`, and the split driver sends it to the
 peripheral at connection and on each change; the peripheral republishes it.
+`rmk/src/ble/sleep.rs`: the sleep manager raises the settings' `idle` bit
+after `LIGHTS_IDLE_SECS` (60) without activity and clears it on the next, so
+the lights go dark long before the keyboard sleeps and a touch on the
+trackpad, which sleep leaves without power, still brings them back. The bit
+travels with the settings (16 bits on the wire) and is not stored.
+
 Not to be confused with upstream's `rmk/src/light.rs`, which is the lock-LED
 indicator code.
 

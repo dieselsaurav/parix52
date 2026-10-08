@@ -107,11 +107,12 @@ up, legends and all, coloured by what they do: digits green, symbols orange, arr
 Bluetooth profiles blue, media violet, modifiers yellow, editing keys magenta, F-keys
 and "everything dark" red. A key that does nothing there stays dark.
 
-- After **one minute** without a key or a pointer move on either half, the keyboard
-  sleeps: the supply to the lights, the screen and the trackpad is switched off
-  completely, which is what makes the battery last. **Press any key on either half to
-  wake it.** The trackpad cannot wake a sleeping keyboard, because it has no power then;
-  it responds again about a quarter of a second after the key.
+- After **one minute** without a key or a pointer move on either half, the key lights
+  go dark. Everything else stays on: press a key or touch the trackpad and they are back.
+- After **ten minutes** the keyboard sleeps: the supply to the lights, the screen and the
+  trackpad is switched off completely, which is what makes the battery last. **Press any
+  key on either half to wake it.** The trackpad cannot wake a sleeping keyboard, because
+  it has no power then; it responds again about a quarter of a second after the key.
 
 All the controls are on the right hand while you hold **Space**, one subject per row:
 

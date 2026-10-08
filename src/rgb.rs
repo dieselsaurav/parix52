@@ -13,6 +13,9 @@
 //!   - a colour per key for the active layer, from `rgb_map` (dim palette,
 //!     battery first); the base layer is dark unless switched on from the
 //!     keyboard, which also sets its colour and the overall brightness
+//!   - after a minute without a key or a pointer move the lights go dark
+//!     (the left half decides and tells the right); the supply stays on,
+//!     so a touch on the trackpad brings them back
 //!   - when the keyboard sleeps (RMK's idle sleep, `keyboard.toml`), the
 //!     module's VCC output is switched off at P0.13, the way ZMK's ext_power
 //!     does it. Every SK6812 draws 0.5-1 mA dark, about 15 mA a half, and
@@ -110,7 +113,7 @@ impl RgbProcessor {
         let phase = (self.anim_start.elapsed().as_millis() % RAINBOW_PERIOD_MS * 256 / RAINBOW_PERIOD_MS) as u8;
         let mut i = 0;
         for led in 0..NUM_LEDS {
-            let (r, g, b) = if self.sleeping {
+            let (r, g, b) = if self.sleeping || self.light.idle {
                 (0, 0, 0)
             } else {
                 rgb_map::color(self.side, layer, led, self.light, phase)
@@ -143,7 +146,8 @@ impl RgbProcessor {
     /// shows the rainbow too.)
     async fn poll(&mut self) {
         let visible = self.preview || self.layer == 0 || self.layer == 3;
-        if !self.sleeping && visible && rgb_map::animated(light_settings()) {
+        let light = light_settings();
+        if !self.sleeping && !light.idle && visible && rgb_map::animated(light) {
             self.show().await;
         }
     }
@@ -159,8 +163,13 @@ impl RgbProcessor {
     }
 
     async fn on_light_event(&mut self, event: LightEvent) {
-        self.light = LightSettings::from_bits(event.0);
-        self.preview = self.light.base_on;
+        let new = LightSettings::from_bits(event.0);
+        // Lights going idle or coming back is not a light key: no preview.
+        let setting_changed = LightSettings { idle: self.light.idle, ..new } != self.light;
+        self.light = new;
+        if setting_changed {
+            self.preview = self.light.base_on;
+        }
         self.anim_start = Instant::now();
         if !self.sleeping {
             self.show().await;

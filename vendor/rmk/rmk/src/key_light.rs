@@ -6,7 +6,7 @@
 //! split link, and every change is published as a [`LightEvent`] on both
 //! halves.
 
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::{AtomicU16, Ordering};
 
 use crate::event::{LightEvent, publish_event};
 
@@ -34,6 +34,10 @@ pub struct LightSettings {
     pub brightness: u8,
     /// Which of the [`BASE_COLORS`] the base layer shows.
     pub base_color: u8,
+    /// Nothing has been pressed or touched for [`LIGHTS_IDLE_SECS`]: every
+    /// light is dark, though the keyboard is still awake. Not a setting: the
+    /// sleep manager raises it and any activity clears it.
+    pub idle: bool,
 }
 
 impl LightSettings {
@@ -42,23 +46,32 @@ impl LightSettings {
         base_on: false,
         brightness: BRIGHTNESS_MAX - 2,
         base_color: 0,
+        idle: false,
     };
 
-    pub const fn from_bits(bits: u8) -> Self {
-        let brightness = (bits >> 4) & 0x07;
+    /// The low byte holds the settings that are stored; bit 8 is `idle`.
+    pub const fn from_bits(bits: u16) -> Self {
+        let brightness = ((bits >> 4) & 0x07) as u8;
         Self {
             base_on: bits & 0x80 != 0,
             brightness: if brightness > BRIGHTNESS_MAX { BRIGHTNESS_MAX } else { brightness },
-            base_color: (bits & 0x0f) % BASE_COLORS,
+            base_color: (bits & 0x0f) as u8 % BASE_COLORS,
+            idle: bits & IDLE_BIT != 0,
         }
     }
 
-    pub const fn to_bits(self) -> u8 {
-        (self.base_on as u8) << 7 | self.brightness << 4 | self.base_color
+    pub const fn to_bits(self) -> u16 {
+        (self.idle as u16) << 8 | (self.base_on as u16) << 7 | (self.brightness as u16) << 4 | self.base_color as u16
     }
 }
 
-static SETTINGS: AtomicU8 = AtomicU8::new(LightSettings::DEFAULT.to_bits());
+const IDLE_BIT: u16 = 1 << 8;
+
+/// How long without a key or a pointer move before the lights go dark. The
+/// keyboard itself sleeps later (`split_central_sleep_timeout_seconds`).
+pub(crate) const LIGHTS_IDLE_SECS: u64 = 60;
+
+static SETTINGS: AtomicU16 = AtomicU16::new(LightSettings::DEFAULT.to_bits());
 
 /// The settings in force on this half.
 pub fn light_settings() -> LightSettings {
@@ -66,11 +79,19 @@ pub fn light_settings() -> LightSettings {
 }
 
 /// Take new settings and tell everyone on this half.
-pub(crate) fn apply(bits: u8) {
+pub(crate) fn apply(bits: u16) {
     let bits = LightSettings::from_bits(bits).to_bits();
     if SETTINGS.swap(bits, Ordering::Relaxed) != bits {
         publish_event(LightEvent::new(bits));
     }
+}
+
+/// The sleep manager's word on whether the lights are idle (central only;
+/// the split link carries it to the other half with the settings).
+pub(crate) fn set_idle(idle: bool) {
+    let mut settings = light_settings();
+    settings.idle = idle;
+    apply(settings.to_bits());
 }
 
 /// One of the light keys was pressed (central only).
@@ -88,7 +109,7 @@ pub(crate) async fn key_pressed(id: u8) {
     }
     apply(settings.to_bits());
     #[cfg(feature = "storage")]
-    crate::storage::store_user_data(LIGHT_SLOT, &[settings.to_bits()]).await.ok();
+    crate::storage::store_user_data(LIGHT_SLOT, &[settings.to_bits() as u8]).await.ok();
 }
 
 /// Read back what the keys last left (central, once, at start).
@@ -98,6 +119,7 @@ pub(crate) async fn load() {
     if let Ok(Some(data)) = embassy_time::with_timeout(embassy_time::Duration::from_secs(2), read).await
         && let Some(bits) = data.first()
     {
-        apply(*bits);
+        // The stored byte has no idle bit; keep the one in force.
+        apply(*bits as u16 | (SETTINGS.load(Ordering::Relaxed) & IDLE_BIT));
     }
 }

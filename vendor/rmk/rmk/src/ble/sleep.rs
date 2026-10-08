@@ -60,14 +60,27 @@ pub(crate) async fn run_sleep_manager() {
 /// The sleep state machine, separate from [`run_sleep_manager`] only so tests
 /// can drive it with a short timeout (the configured one is 0 in test builds).
 async fn manage_sleep_state(idle_timeout: Duration) -> ! {
+    // PARIX PATCH: the lights go dark well before the keyboard sleeps. Sleep
+    // cuts the supply of the trackpad too, which then cannot wake anything;
+    // dark lights cost a touch nothing, it brings them straight back.
+    let lights_after = Duration::from_secs(crate::key_light::LIGHTS_IDLE_SECS).min(idle_timeout);
     loop {
         // Awake: sleep once the keyboard has been idle for `idle_timeout`, or as
         // soon as something asks us to. The input is polled first so activity
         // racing the timeout wins the tie instead of causing a spurious sleep.
         loop {
-            match select(SLEEP_INPUT.wait(), Timer::after(idle_timeout)).await {
+            match select(SLEEP_INPUT.wait(), Timer::after(lights_after)).await {
+                Either::First(true) => break,
+                Either::First(false) => {
+                    debug!("Activity detected, resetting sleep timeout");
+                    continue;
+                }
+                Either::Second(_) => {}
+            }
+            crate::key_light::set_idle(true);
+            match select(SLEEP_INPUT.wait(), Timer::after(idle_timeout - lights_after)).await {
                 Either::First(true) | Either::Second(_) => break,
-                Either::First(false) => debug!("Activity detected, resetting sleep timeout"),
+                Either::First(false) => crate::key_light::set_idle(false),
             }
         }
         info!("Entering sleep mode");
@@ -78,6 +91,7 @@ async fn manage_sleep_state(idle_timeout: Duration) -> ! {
         while SLEEP_INPUT.wait().await {}
 
         info!("Waking up from sleep mode due to activity");
+        crate::key_light::set_idle(false);
         SLEEPING_STATE.store(false, Ordering::Release);
         publish_event(SleepStateEvent::new(false));
     }
