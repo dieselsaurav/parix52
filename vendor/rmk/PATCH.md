@@ -127,6 +127,15 @@ while lit. It keeps updating while charging, where upstream froze it, and the
 charge state comes from the chip's VBUS detector, so no charge-state pin is
 needed: on USB power a half reports itself as charging.
 
+`rmk/src/ble/battery_service.rs`: a peripheral's level is not notified to the
+host while the keyboard is asleep or idle; the newest value is sent at the
+next activity. Upstream guards the central's own level this way but not the
+peripherals'. Seen 2026-10-09: the right half's level wobbled a point per
+30 s sample, each notification woke the sleeping Mac (pmset: "HID Activity"
+on the same :23/:53 beat as the battery updates in the Bluetooth log), and
+the Mac's wake-up woke the keyboard. `battery.rs` also reports a new level
+only after a move of two points, which stops the wobble at its source.
+
 ## Dropped since the first base (b982049)
 
 Upstream now carries its own version of: the PHY/connection-parameter retry

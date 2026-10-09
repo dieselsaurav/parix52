@@ -309,7 +309,22 @@ impl<P: PacketPool> Runnable for BlePeripheralBatteryServer<'_, '_, '_, P> {
         }
 
         loop {
-            let event = self.sub.next_message_pure().await;
+            let mut event = self.sub.next_message_pure().await;
+            // PARIX PATCH: nothing is sent while the keyboard sleeps. A
+            // notification wakes a sleeping computer ("HID Activity" on
+            // macOS), the computer's wake-up wakes the keyboard, and a level
+            // that wobbles by a point kept both awake all night. The central's
+            // own level has had this rule from upstream; the peripherals'
+            // had none. Idle counts too (no key or pointer move for a minute,
+            // the same minute as the central's rule): a computer that sleeps
+            // without telling us leaves the keyboard awake for a while. The
+            // newest value goes out at the next activity.
+            while SLEEPING_STATE.load(Ordering::Acquire) || crate::key_light::light_settings().idle {
+                Timer::after_secs(2).await;
+            }
+            while let Some(newer) = self.sub.try_next_message_pure() {
+                event = newer;
+            }
             if let Some(slot) = find_peripheral_battery_slot(&crate::SPLIT_BATTERY_PERIPHERAL_IDS, event.id)
                 && let BatteryStatus::Available { level: Some(level), .. } = event.state.0
                 && let Err(e) = self.battery_levels[slot].notify(self.conn, &level, true).await

@@ -266,7 +266,15 @@ impl BatteryProcessor {
                 _ => mv * 16,
             };
             self.filtered_mv16 = Some(filtered);
-            let level = Some(lipo_percent(filtered / 16));
+            let percent = lipo_percent(filtered / 16);
+            // A level that sits on the edge between two points flips with
+            // every sample, and each flip is sent over the split link and to
+            // the computer. Report a new level only once it has moved two
+            // points from the reported one, or reached either end.
+            let level = match previous {
+                Some((_, Some(shown))) if percent.abs_diff(shown) < 2 && percent != 0 && percent != 100 => Some(shown),
+                _ => Some(percent),
+            };
             if previous != Some((charge_state, level)) {
                 self.commit(BatteryStatus::Available { charge_state, level });
             }
