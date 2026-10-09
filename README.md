@@ -1,13 +1,13 @@
 # Parix 52
 
-Firmware for the **Parix 52**, a 52-key wireless split keyboard with the ZSA Voyager's
+Firmware for the **Parix 52**, a 52-key wireless split keyboard with a column-staggered
 layout, low-profile Choc switches, per-key lighting and a trackpad on the right half.
 It runs [RMK](https://github.com/HaoboGu/rmk), a keyboard firmware written in Rust, on
 an nRF52840 controller in each half. The two halves talk to each other over Bluetooth,
 and the keyboard talks to your computer over Bluetooth or USB.
 
-This page is the manual. The hardware design (PCB, case) lives in
-[dieselsaurav/paraboard](https://github.com/dieselsaurav/paraboard).
+This page is the manual. The keyboard is designed and built by
+[Parix](https://parix.in) in Bengaluru.
 
 - [The keymap](#the-keymap)
 - [Connecting: USB and Bluetooth](#connecting-usb-and-bluetooth)
@@ -100,7 +100,7 @@ its own.
 
 ## Lights and screens
 
-Every key has a light under it, and the legends on the white keycaps show only when
+Every key has a light under it, and the shine-through legends show only when
 their key is lit. The base layer starts as a rainbow sweeping across both halves; you
 can change it to a solid colour or switch it off, which saves the most battery (below). Hold a layer key and that layer's live keys light
 up, legends and all, coloured by what they do: digits green, symbols orange, arrows and
@@ -150,7 +150,7 @@ brightest) in `src/status.rs` and reflash the left half; pairings are kept.
 
 Each half takes a 3.7 V lithium-polymer cell on a JST-PH plug, switched by the slide
 switch on the board. Charging is through the USB port of each half, at about 100 mA
-(roughly ten hours for a 1000 mAh cell); the charger works whether the switch is on or
+(roughly twelve hours for the 1200 mAh cell); the charger works whether the switch is on or
 off. The left half reports its level to the computer; the screen shows both halves.
 
 The percentage is an estimate from the cell's voltage, read along a lithium-polymer
@@ -256,7 +256,7 @@ Where things are:
 
 ## Hardware reference
 
-Per half: nRF52840 Pro Micro-style module (nice!nano v2 or compatible), 26 Kailh Choc
+Per half: a Pro Micro nRF52840 controller (socketed), 26 Kailh Choc
 hotswap switches, 26 SK6812MINI-E LEDs, a JST-PH battery plug with slide switch, a
 display header (SSD1306 OLED on the left, the Cirque TM040040 trackpad on the right).
 
