@@ -149,8 +149,9 @@ brightest) in `src/status.rs` and reflash the left half; pairings are kept.
 ## Battery
 
 Each half takes a 3.7 V lithium-polymer cell on a JST-PH plug, switched by the slide
-switch on the board. Charging is through the USB port of each half, at about 100 mA
-(roughly twelve hours for the 1200 mAh cell); the charger works whether the switch is on or
+switch on the board. Charging is through the USB port of each half, at about 300 mA
+(the controller's charge-current jumper is bridged at the workshop; roughly four to five
+hours for the 1200 mAh cell); the charger works whether the switch is on or
 off. The left half reports its level to the computer; the screen shows both halves.
 
 The percentage is an estimate from the cell's voltage, read along a lithium-polymer
