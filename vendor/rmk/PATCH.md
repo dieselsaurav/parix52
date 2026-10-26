@@ -80,6 +80,18 @@ sleep. And a link coming up while awake is no longer reported as activity
 (upstream does so for service discovery): it restarted the idle timeout and
 relit the lights, and a bouncing link kept the keyboard awake for good.
 
+## Only the user wakes the keyboard
+
+`rmk/src/ble/mod.rs`.
+
+As on ZMK, only a key or the trackpad counts as activity for the sleep
+manager. Upstream also counts the host re-subscribing to notifications (its
+way of waking with macOS, which sends no HID exit-suspend) and an HID
+exit-suspend itself; macOS's maintenance wakes every quarter hour then relit
+the lights and restarted the idle timeout. The host's HID suspend still puts
+the keyboard to sleep at once. Keys are processed while asleep, so nothing is
+lost by waiting for one.
+
 ## The screen is told the real output
 
 `rmk/src/display/mod.rs`.

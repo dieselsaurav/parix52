@@ -616,12 +616,11 @@ async fn gatt_events_task(server: &Server<'_>, conn: &GattConnection<'_, '_, Def
                             // HID Class spec opcodes for the HID Control Point characteristic:
                             //   - 0: HID_CTRL_SUSPEND
                             //   - 1: HID_CTRL_EXIT_SUSPEND
-                            if data_len == 1 {
-                                match data[0] {
-                                    0 => request_sleep(),
-                                    1 => report_activity(),
-                                    _ => {}
-                                }
+                            // PARIX PATCH: only a suspend is acted on. Upstream
+                            // takes an exit-suspend as activity; here, as on
+                            // ZMK, only a key or the trackpad wakes the keyboard.
+                            if data_len == 1 && data[0] == 0 {
+                                request_sleep();
                             }
                         }
 
@@ -649,10 +648,11 @@ async fn gatt_events_task(server: &Server<'_>, conn: &GattConnection<'_, '_, Def
 
                 // Update CCCD table after processing the event
                 if cccd_updated {
-                    // When macOS wakes up from sleep mode, it won't send EXIT SUSPEND command
-                    // So we need to monitor the sleep state by using CCCD write event
-                    report_activity();
-
+                    // PARIX PATCH: upstream reports activity here so the
+                    // keyboard wakes with macOS (which sends no exit-suspend).
+                    // A host subscribing is not the user: the Mac's
+                    // maintenance wakes every quarter hour relit the lights
+                    // and restarted the idle timeout. A key wakes us anyway.
                     if let Some(table) = server.get_client_att_table(conn.raw())
                         && let Ok(bytes) = heapless::Vec::from_slice(table.raw())
                     {
