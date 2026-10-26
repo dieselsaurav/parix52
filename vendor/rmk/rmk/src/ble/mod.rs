@@ -365,11 +365,17 @@ async fn run_ble_keyboard<
                         // bouncing in and out of sleep every 50 s. Stay quiet
                         // until the user touches the keyboard: that key wakes
                         // the Mac, as the user expects, and nothing else does.
-                        Either::First(_) => {
+                        // Only for a link that was fully up (encrypted): one
+                        // that failed, as a host with a stale bond does until
+                        // it is told to forget us, is advertised to again at
+                        // once, or the keyboard would vanish from the pairing
+                        // list until a key.
+                        Either::First(_) if crate::state::current_ble_status().state == BleState::Connected => {
                             info!("[ble] host link ended, waiting for a key before advertising");
                             set_ble_state(BleState::Inactive);
                             wait_for_user_input().await;
                         }
+                        Either::First(_) => {}
                     }
                 }
                 Either::First(Err(BleHostError::BleHost(Error::Timeout))) => {

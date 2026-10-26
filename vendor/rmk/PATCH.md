@@ -96,8 +96,10 @@ lost by waiting for one.
 
 `rmk/src/ble/mod.rs`.
 
-When the host ends the connection (a Mac does so when it sleeps), the
-keyboard waits for a key press or a pointer move before advertising again;
+When the host ends an established (encrypted) connection (a Mac does so when
+it sleeps), the keyboard waits for a key press or a pointer move before
+advertising again; a connection that failed, as a host with a stale bond makes
+until it forgets the keyboard, is advertised to again at once as upstream does;
 upstream advertises at once for five minutes. A sleeping Mac wakes to
 reconnect a bonded keyboard it sees advertising, so with upstream's behaviour
 it bounced in and out of sleep every 50 s all evening. Boot, a profile switch
