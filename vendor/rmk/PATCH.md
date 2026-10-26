@@ -68,6 +68,18 @@ low for the sleep and reconfigures the pad on waking. The split link's
 peripheral latency while asleep is 25 (0.5 s) instead of 200 (4 s) so the
 right half hears the wake-up promptly.
 
+## The split link does not wake the keyboard
+
+`rmk/src/split/driver.rs`, `rmk/src/split/ble/central.rs`.
+
+The central sends the peripheral its sleep state when the link comes up, with
+the connection status and the light settings; upstream sends it only on a
+transition, and a peripheral that starts advertising wakes itself, so a link
+that dropped while the keyboard slept left the right half lit until the next
+sleep. And a link coming up while awake is no longer reported as activity
+(upstream does so for service discovery): it restarted the idle timeout and
+relit the lights, and a bouncing link kept the keyboard awake for good.
+
 ## The screen is told the real output
 
 `rmk/src/display/mod.rs`.

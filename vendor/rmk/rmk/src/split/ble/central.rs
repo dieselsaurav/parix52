@@ -632,12 +632,12 @@ async fn update_conn_params_on_sleep_change<
 ) -> Result<(), BleHostError<C::Error>> {
     let mut sleep_events = SleepStateEvent::subscriber();
 
+    // PARIX PATCH: upstream reports activity here while awake, so that service
+    // discovery is not cut short by the idle timeout. A link that comes up is
+    // not a key press: it restarted the ten-minute clock and relit dark lights
+    // on both halves, and a link that bounced kept the keyboard awake for
+    // good. Discovery runs on whichever parameters are in force.
     let mut sleeping = crate::state::current_sleep_state();
-    if !sleeping {
-        // Restart the idle timeout so service discovery isn't cut short. Asleep
-        // this isn't user activity, so discovery runs on the sleep parameters.
-        report_activity();
-    }
 
     let mut sleeping_conn_param_applied = false;
 

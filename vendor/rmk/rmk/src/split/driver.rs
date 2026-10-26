@@ -231,6 +231,19 @@ impl<T: SplitReader + SplitWriter> PeripheralManager<T> {
             return;
         }
 
+        // PARIX PATCH: and awake. The sleep state otherwise travels only on a
+        // transition, and a peripheral that starts advertising wakes itself:
+        // if the link dropped while the keyboard slept, the right half came
+        // back with its rail and lights on and nothing told it to sleep again
+        // until the central next woke and slept.
+        if self
+            .send(&SplitMessage::SleepState(crate::state::current_sleep_state()))
+            .await
+            .is_err()
+        {
+            return;
+        }
+
         #[cfg(feature = "dfu_split")]
         self.check_firmware_update().await;
 
