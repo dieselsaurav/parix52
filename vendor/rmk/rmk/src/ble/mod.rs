@@ -342,7 +342,7 @@ async fn run_ble_keyboard<
                         disconnect(&conn).await;
                         continue;
                     }
-                    if let Either::Second(_) = select(
+                    match select(
                         serve_keyboard_connection(
                             server,
                             &conn,
@@ -357,7 +357,19 @@ async fn run_ble_keyboard<
                     .await
                     {
                         // When the profile changes, manually disconnect from the current host
-                        disconnect(&conn).await;
+                        Either::Second(_) => disconnect(&conn).await,
+                        // PARIX PATCH: the host let the link go (a Mac does so
+                        // when it sleeps). Upstream advertises again at once,
+                        // and a Mac that sleeps with a bonded keyboard
+                        // advertising wakes to reconnect it, every time; seen
+                        // bouncing in and out of sleep every 50 s. Stay quiet
+                        // until the user touches the keyboard: that key wakes
+                        // the Mac, as the user expects, and nothing else does.
+                        Either::First(_) => {
+                            info!("[ble] host link ended, waiting for a key before advertising");
+                            set_ble_state(BleState::Inactive);
+                            wait_for_user_input().await;
+                        }
                     }
                 }
                 Either::First(Err(BleHostError::BleHost(Error::Timeout))) => {
@@ -367,13 +379,8 @@ async fn run_ble_keyboard<
                     request_sleep();
 
                     // Wake on key or pointing activity after the advertising
-                    // timeout. Subscribed here, not up front: a permanently
-                    // idle subscriber stalls `publish_event_async` once the
-                    // channel fills, and its backlog would satisfy this wait
-                    // instantly with a stale event.
-                    let mut key_wake = crate::event::KeyboardEvent::subscriber();
-                    let mut pointing_wake = crate::event::PointingEvent::subscriber();
-                    let _ = select(key_wake.next_message_pure(), pointing_wake.next_message_pure()).await;
+                    // timeout.
+                    wait_for_user_input().await;
 
                     report_activity();
                 }
@@ -809,6 +816,23 @@ pub(crate) async fn set_conn_params<
 }
 
 /// Serve one host keyboard connection.
+/// Wait for the next key press or pointer move. Subscribed here, not up
+/// front: a permanently idle subscriber stalls `publish_event_async` once the
+/// channel fills, and its backlog would satisfy this wait instantly with a
+/// stale event. (PARIX PATCH: shared by the advertising timeout and the end
+/// of a host connection; a release does not count, so the key whose press
+/// went to the host before the link ended cannot start advertising.)
+async fn wait_for_user_input() {
+    let mut key_wake = crate::event::KeyboardEvent::subscriber();
+    let mut pointing_wake = crate::event::PointingEvent::subscriber();
+    loop {
+        match select(key_wake.next_message_pure(), pointing_wake.next_message_pure()).await {
+            Either::First(key) if !key.pressed => continue,
+            _ => return,
+        }
+    }
+}
+
 async fn serve_keyboard_connection<
     'a,
     'b,

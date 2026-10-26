@@ -92,6 +92,17 @@ the lights and restarted the idle timeout. The host's HID suspend still puts
 the keyboard to sleep at once. Keys are processed while asleep, so nothing is
 lost by waiting for one.
 
+## A dropped host link is not advertised to until a key
+
+`rmk/src/ble/mod.rs`.
+
+When the host ends the connection (a Mac does so when it sleeps), the
+keyboard waits for a key press or a pointer move before advertising again;
+upstream advertises at once for five minutes. A sleeping Mac wakes to
+reconnect a bonded keyboard it sees advertising, so with upstream's behaviour
+it bounced in and out of sleep every 50 s all evening. Boot, a profile switch
+and the advertising timeout are unchanged.
+
 ## The screen is told the real output
 
 `rmk/src/display/mod.rs`.
