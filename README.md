@@ -9,6 +9,7 @@ and the keyboard talks to your computer over Bluetooth or USB.
 This page is the manual. The keyboard is designed and built by
 [Parix](https://parix.in) in Bengaluru.
 
+- [Quick start](#quick-start)
 - [The keymap](#the-keymap)
 - [Connecting: USB and Bluetooth](#connecting-usb-and-bluetooth)
 - [The trackpad](#the-trackpad)
@@ -19,6 +20,29 @@ This page is the manual. The keyboard is designed and built by
 - [If something goes wrong](#if-something-goes-wrong)
 - [Building from source](#building-from-source)
 - [Hardware reference](#hardware-reference)
+
+## Quick start
+
+![Where things are on the Parix 52: USB ports, power switches, screen, thumb keys and trackpad](docs/quickstart.svg)
+
+1. **Charge.** Plug a USB-C cable into the top edge of each half. A full charge takes four
+   to five hours, and the halves charge whether they are switched on or off.
+2. **Switch on.** Slide the power switch on the inner edge of the left half, then the right.
+   The keys light up in a rainbow and the left half's screen comes on. The two halves find
+   each other by themselves.
+3. **Pair.** Open your computer's Bluetooth settings and choose **Parix 52**. The screen
+   shows `BT1?` while it waits and `BT1` once connected. No Bluetooth? Plug the left half
+   in by USB and it types over the cable.
+4. **Type.** The base layer is QWERTY. Hold a thumb key to reach another layer: Space for
+   media and lights, Tab for arrows, Enter for symbols, Backspace for numbers. The lit keys
+   show what the layer offers; the full map is [below](#the-keymap).
+5. **Point.** Move a finger on the trackpad, tap to click, and run it round the outer ring
+   to scroll. More in [The trackpad](#the-trackpad).
+
+The key lights go dark after a minute and the keyboard sleeps after ten; press any key to
+wake it. To change the lights, hold Space: Y switches them on or off, U changes the colour,
+O and P set the brightness ([Lights and screens](#lights-and-screens)). If something does
+not behave, see [If something goes wrong](#if-something-goes-wrong).
 
 ## The keymap
 
